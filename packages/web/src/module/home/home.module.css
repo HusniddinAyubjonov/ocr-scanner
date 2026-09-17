@@ -177,6 +177,47 @@
   color: #334155;
 }
 
+.fieldsBlock {
+  margin: 24px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+}
+
+.fieldRow {
+  margin-bottom: 12px;
+}
+
+.fieldRow:last-child {
+  margin-bottom: 0;
+}
+
+.fieldLabel {
+  margin-bottom: 6px;
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3730a3;
+}
+
+.fieldInput {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #c7d2fe;
+  background: #ffffff;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.fieldInput:focus {
+  border-color: #4338ca;
+}
+
 .linesBlock {
   margin: 24px 0;
 }

@@ -4,14 +4,18 @@ import { useState } from "react"
 import type { ChangeEvent } from "react"
 import { createWorker, PSM } from "tesseract.js"
 import { Modal } from "@/ui-component/modal/modal.component"
-import { preprocessImage } from "./home.utils"
+import { extractDocumentFields, preprocessImage } from "./home.utils"
+import type { DocumentFields } from "./home.utils"
 import styles from "./home.module.css"
 
 const OCR_LANGUAGES = "eng+rus+tgk"
 
+const EMPTY_FIELDS: DocumentFields = { fullName: "", birthDate: "", documentNumber: "" }
+
 export const Home = () => {
   const [image, setImage] = useState<string | null>(null)
   const [textLines, setTextLines] = useState<string[]>([])
+  const [fields, setFields] = useState<DocumentFields>(EMPTY_FIELDS)
   const [isRecognizing, setIsRecognizing] = useState(false)
   const [recognizeProgress, setRecognizeProgress] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -22,6 +26,7 @@ export const Home = () => {
 
     setImage(imageUrl)
     setTextLines([])
+    setFields(EMPTY_FIELDS)
     setErrorMessage(null)
     setRecognizeProgress(0)
     setIsRecognizing(true)
@@ -51,6 +56,7 @@ export const Home = () => {
         .filter(Boolean)
 
       setTextLines(lines)
+      setFields(extractDocumentFields(lines))
     } catch (error) {
       console.error("OCR error:", error)
       setErrorMessage(
@@ -82,8 +88,13 @@ export const Home = () => {
   const handleRemoveImage = () => {
     setImage(null)
     setTextLines([])
+    setFields(EMPTY_FIELDS)
     setErrorMessage(null)
     setRecognizeProgress(0)
+  }
+
+  const handleFieldChange = (field: keyof DocumentFields, value: string) => {
+    setFields((current) => ({ ...current, [field]: value }))
   }
 
   const handleLineChange = (index: number, value: string) => {
@@ -105,6 +116,7 @@ export const Home = () => {
 
     setImage(null)
     setTextLines([])
+    setFields(EMPTY_FIELDS)
     setIsModalOpen(true)
   }
 
@@ -191,8 +203,54 @@ export const Home = () => {
 
         {errorMessage && <div className={styles.errorBlock}>{errorMessage}</div>}
 
+        {textLines.length > 0 && (
+          <div className={styles.fieldsBlock}>
+            <div className={styles.fieldRow}>
+              <label htmlFor="fullName" className={styles.fieldLabel}>
+                ФИО
+              </label>
+              <input
+                id="fullName"
+                type="text"
+                value={fields.fullName}
+                onChange={(event) => handleFieldChange("fullName", event.target.value)}
+                placeholder="Не найдено"
+                className={styles.fieldInput}
+              />
+            </div>
+
+            <div className={styles.fieldRow}>
+              <label htmlFor="birthDate" className={styles.fieldLabel}>
+                Дата рождения
+              </label>
+              <input
+                id="birthDate"
+                type="text"
+                value={fields.birthDate}
+                onChange={(event) => handleFieldChange("birthDate", event.target.value)}
+                placeholder="Не найдено"
+                className={styles.fieldInput}
+              />
+            </div>
+
+            <div className={styles.fieldRow}>
+              <label htmlFor="documentNumber" className={styles.fieldLabel}>
+                Номер документа
+              </label>
+              <input
+                id="documentNumber"
+                type="text"
+                value={fields.documentNumber}
+                onChange={(event) => handleFieldChange("documentNumber", event.target.value)}
+                placeholder="Не найдено"
+                className={styles.fieldInput}
+              />
+            </div>
+          </div>
+        )}
+
         <div className={styles.linesBlock}>
-          <span className={styles.textareaLabel}>Распознанный текст</span>
+          <span className={styles.textareaLabel}>Все строки (можно поправить вручную)</span>
 
           {textLines.length === 0 && (
             <p className={styles.linesEmptyHint}>Здесь появятся строки распознанного текста...</p>
