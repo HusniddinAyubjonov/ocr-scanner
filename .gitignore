@@ -1,0 +1,12 @@
+.vscode/
+.idea/
+_/
+dist/
+.next/
+node_modules/
+npm-debug.log
+tsconfig.tsbuildinfo
+.env
+package-lock.json
+uploads
+.cache

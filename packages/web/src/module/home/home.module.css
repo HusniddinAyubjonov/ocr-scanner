@@ -1,0 +1,231 @@
+.main {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 45%);
+  padding: 48px 20px;
+}
+
+.card {
+  width: 100%;
+  max-width: 640px;
+  border-radius: 24px;
+  background: #ffffff;
+  padding: 32px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 20px 40px -12px rgba(15, 23, 42, 0.12);
+}
+
+.header {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.badge {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.subtitle {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: 16px;
+  border: 2px dashed #cbd5e1;
+  padding: 44px 24px;
+  text-align: center;
+  color: #334155;
+  background: #f8fafc;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.dropzone:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.dropzoneIcon {
+  width: 32px;
+  height: 32px;
+  color: #64748b;
+}
+
+.dropzoneTitle {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dropzoneHint {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.previewBlock {
+  position: relative;
+  margin-bottom: 20px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.previewImage {
+  display: block;
+  max-height: 360px;
+  width: 100%;
+  object-fit: contain;
+}
+
+.removeButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.65);
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+}
+
+.removeButton:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.removeButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.progressBlock {
+  margin: 20px 0;
+}
+
+.progressLabel {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.progressTrack {
+  height: 8px;
+  width: 100%;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: #111827;
+  transition: width 0.2s ease;
+}
+
+.errorBlock {
+  margin-bottom: 20px;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 14px 16px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.textareaBlock {
+  margin: 24px 0;
+}
+
+.textareaLabel {
+  margin-bottom: 8px;
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.textarea {
+  width: 100%;
+  resize: none;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 16px;
+  font: inherit;
+  font-size: 14px;
+  color: #0f172a;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.textarea:focus {
+  border-color: #111827;
+  background: #ffffff;
+}
+
+.submitButton {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: #111827;
+  color: #ffffff;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    transform 0.05s ease;
+}
+
+.submitButton:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.submitButton:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.submitButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}

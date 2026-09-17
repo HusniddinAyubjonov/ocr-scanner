@@ -1,0 +1,6 @@
+packages:
+  - "./packages/web"
+  - "./packages/server"
+allowBuilds:
+  tesseract.js: true
+  unrs-resolver: true

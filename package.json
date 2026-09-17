@@ -1,0 +1,17 @@
+{
+  "name": "@project/root",
+  "private": true,
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "prettier": "^3.2.5",
+    "cross-env": "^7.0.3",
+    "typescript": "^5.5.3"
+  },
+  "scripts": {
+    "clean": "sh ./scripts/clean.sh",
+    "web": "cd ./packages/web && pnpm run dev",
+    "bootstrap": "sh ./scripts/bootstrap.sh",
+    "clean-hard": "sh ./scripts/clean.sh --hard"
+  },
+  "packageManager": "pnpm@11.16.0"
+}
