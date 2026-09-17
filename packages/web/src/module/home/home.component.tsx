@@ -4,18 +4,14 @@ import { useState } from "react"
 import type { ChangeEvent } from "react"
 import { createWorker, PSM } from "tesseract.js"
 import { Modal } from "@/ui-component/modal/modal.component"
-import { extractDocumentFields, preprocessImage } from "./home.utils"
-import type { DocumentFields } from "./home.utils"
+import { preprocessImage } from "./home.utils"
 import styles from "./home.module.css"
 
 const OCR_LANGUAGES = "eng+rus+tgk"
 
-const EMPTY_FIELDS: DocumentFields = { fullName: "", birthDate: "", documentNumber: "" }
-
 export const Home = () => {
   const [image, setImage] = useState<string | null>(null)
-  const [textLines, setTextLines] = useState<string[]>([])
-  const [fields, setFields] = useState<DocumentFields>(EMPTY_FIELDS)
+  const [recognizedText, setRecognizedText] = useState("")
   const [isRecognizing, setIsRecognizing] = useState(false)
   const [recognizeProgress, setRecognizeProgress] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -25,8 +21,7 @@ export const Home = () => {
     const imageUrl = URL.createObjectURL(selectedFile)
 
     setImage(imageUrl)
-    setTextLines([])
-    setFields(EMPTY_FIELDS)
+    setRecognizedText("")
     setErrorMessage(null)
     setRecognizeProgress(0)
     setIsRecognizing(true)
@@ -50,13 +45,7 @@ export const Home = () => {
 
       URL.revokeObjectURL(processedImageUrl)
 
-      const lines = result.data.text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-
-      setTextLines(lines)
-      setFields(extractDocumentFields(lines))
+      setRecognizedText(result.data.text)
     } catch (error) {
       console.error("OCR error:", error)
       setErrorMessage(
@@ -87,36 +76,18 @@ export const Home = () => {
 
   const handleRemoveImage = () => {
     setImage(null)
-    setTextLines([])
-    setFields(EMPTY_FIELDS)
+    setRecognizedText("")
     setErrorMessage(null)
     setRecognizeProgress(0)
   }
 
-  const handleFieldChange = (field: keyof DocumentFields, value: string) => {
-    setFields((current) => ({ ...current, [field]: value }))
-  }
-
-  const handleLineChange = (index: number, value: string) => {
-    setTextLines((lines) => lines.map((line, i) => (i === index ? value : line)))
-  }
-
-  const handleRemoveLine = (index: number) => {
-    setTextLines((lines) => lines.filter((_, i) => i !== index))
-  }
-
-  const handleAddLine = () => {
-    setTextLines((lines) => [...lines, ""])
-  }
-
   const handleSubmit = () => {
-    if (!textLines.some((line) => line.trim())) {
+    if (!recognizedText.trim()) {
       return
     }
 
     setImage(null)
-    setTextLines([])
-    setFields(EMPTY_FIELDS)
+    setRecognizedText("")
     setIsModalOpen(true)
   }
 
@@ -203,88 +174,25 @@ export const Home = () => {
 
         {errorMessage && <div className={styles.errorBlock}>{errorMessage}</div>}
 
-        {textLines.length > 0 && (
-          <div className={styles.fieldsBlock}>
-            <div className={styles.fieldRow}>
-              <label htmlFor="fullName" className={styles.fieldLabel}>
-                ФИО
-              </label>
-              <input
-                id="fullName"
-                type="text"
-                value={fields.fullName}
-                onChange={(event) => handleFieldChange("fullName", event.target.value)}
-                placeholder="Не найдено"
-                className={styles.fieldInput}
-              />
-            </div>
+        <div className={styles.textareaBlock}>
+          <label htmlFor="recognizedText" className={styles.textareaLabel}>
+            Распознанный текст
+          </label>
 
-            <div className={styles.fieldRow}>
-              <label htmlFor="birthDate" className={styles.fieldLabel}>
-                Дата рождения
-              </label>
-              <input
-                id="birthDate"
-                type="text"
-                value={fields.birthDate}
-                onChange={(event) => handleFieldChange("birthDate", event.target.value)}
-                placeholder="Не найдено"
-                className={styles.fieldInput}
-              />
-            </div>
-
-            <div className={styles.fieldRow}>
-              <label htmlFor="documentNumber" className={styles.fieldLabel}>
-                Номер документа
-              </label>
-              <input
-                id="documentNumber"
-                type="text"
-                value={fields.documentNumber}
-                onChange={(event) => handleFieldChange("documentNumber", event.target.value)}
-                placeholder="Не найдено"
-                className={styles.fieldInput}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className={styles.linesBlock}>
-          <span className={styles.textareaLabel}>Все строки (можно поправить вручную)</span>
-
-          {textLines.length === 0 && (
-            <p className={styles.linesEmptyHint}>Здесь появятся строки распознанного текста...</p>
-          )}
-
-          {textLines.map((line, index) => (
-            // eslint-disable-next-line react/no-array-index-key
-            <div key={index} className={styles.lineRow}>
-              <input
-                type="text"
-                value={line}
-                onChange={(event) => handleLineChange(index, event.target.value)}
-                className={styles.lineInput}
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveLine(index)}
-                className={styles.lineRemoveButton}
-                aria-label="Удалить строку"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-
-          <button type="button" onClick={handleAddLine} className={styles.addLineButton}>
-            + Добавить строку
-          </button>
+          <textarea
+            id="recognizedText"
+            value={recognizedText}
+            onChange={(event) => setRecognizedText(event.target.value)}
+            placeholder="Здесь появится распознанный текст..."
+            rows={6}
+            className={styles.textarea}
+          />
         </div>
 
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!textLines.some((line) => line.trim()) || isRecognizing}
+          disabled={!recognizedText.trim() || isRecognizing}
           className={styles.submitButton}
         >
           Отправить
