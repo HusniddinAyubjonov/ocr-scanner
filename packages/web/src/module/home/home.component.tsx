@@ -11,7 +11,7 @@ const OCR_LANGUAGES = "eng+rus+tgk"
 
 export const Home = () => {
   const [image, setImage] = useState<string | null>(null)
-  const [recognizedText, setRecognizedText] = useState("")
+  const [textLines, setTextLines] = useState<string[]>([])
   const [isRecognizing, setIsRecognizing] = useState(false)
   const [recognizeProgress, setRecognizeProgress] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -21,7 +21,7 @@ export const Home = () => {
     const imageUrl = URL.createObjectURL(selectedFile)
 
     setImage(imageUrl)
-    setRecognizedText("")
+    setTextLines([])
     setErrorMessage(null)
     setRecognizeProgress(0)
     setIsRecognizing(true)
@@ -45,7 +45,12 @@ export const Home = () => {
 
       URL.revokeObjectURL(processedImageUrl)
 
-      setRecognizedText(result.data.text)
+      const lines = result.data.text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+      setTextLines(lines)
     } catch (error) {
       console.error("OCR error:", error)
       setErrorMessage(
@@ -76,18 +81,30 @@ export const Home = () => {
 
   const handleRemoveImage = () => {
     setImage(null)
-    setRecognizedText("")
+    setTextLines([])
     setErrorMessage(null)
     setRecognizeProgress(0)
   }
 
+  const handleLineChange = (index: number, value: string) => {
+    setTextLines((lines) => lines.map((line, i) => (i === index ? value : line)))
+  }
+
+  const handleRemoveLine = (index: number) => {
+    setTextLines((lines) => lines.filter((_, i) => i !== index))
+  }
+
+  const handleAddLine = () => {
+    setTextLines((lines) => [...lines, ""])
+  }
+
   const handleSubmit = () => {
-    if (!recognizedText.trim()) {
+    if (!textLines.some((line) => line.trim())) {
       return
     }
 
     setImage(null)
-    setRecognizedText("")
+    setTextLines([])
     setIsModalOpen(true)
   }
 
@@ -174,25 +191,42 @@ export const Home = () => {
 
         {errorMessage && <div className={styles.errorBlock}>{errorMessage}</div>}
 
-        <div className={styles.textareaBlock}>
-          <label htmlFor="recognizedText" className={styles.textareaLabel}>
-            Распознанный текст
-          </label>
+        <div className={styles.linesBlock}>
+          <span className={styles.textareaLabel}>Распознанный текст</span>
 
-          <textarea
-            id="recognizedText"
-            value={recognizedText}
-            onChange={(event) => setRecognizedText(event.target.value)}
-            placeholder="Здесь появится распознанный текст..."
-            rows={6}
-            className={styles.textarea}
-          />
+          {textLines.length === 0 && (
+            <p className={styles.linesEmptyHint}>Здесь появятся строки распознанного текста...</p>
+          )}
+
+          {textLines.map((line, index) => (
+            // eslint-disable-next-line react/no-array-index-key
+            <div key={index} className={styles.lineRow}>
+              <input
+                type="text"
+                value={line}
+                onChange={(event) => handleLineChange(index, event.target.value)}
+                className={styles.lineInput}
+              />
+              <button
+                type="button"
+                onClick={() => handleRemoveLine(index)}
+                className={styles.lineRemoveButton}
+                aria-label="Удалить строку"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          <button type="button" onClick={handleAddLine} className={styles.addLineButton}>
+            + Добавить строку
+          </button>
         </div>
 
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!recognizedText.trim() || isRecognizing}
+          disabled={!textLines.some((line) => line.trim()) || isRecognizing}
           className={styles.submitButton}
         >
           Отправить

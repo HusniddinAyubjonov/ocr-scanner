@@ -169,10 +169,6 @@
   text-align: center;
 }
 
-.textareaBlock {
-  margin: 24px 0;
-}
-
 .textareaLabel {
   margin-bottom: 8px;
   display: block;
@@ -181,13 +177,34 @@
   color: #334155;
 }
 
-.textarea {
-  width: 100%;
-  resize: none;
+.linesBlock {
+  margin: 24px 0;
+}
+
+.linesEmptyHint {
   border-radius: 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px dashed #e2e8f0;
   background: #f8fafc;
   padding: 16px;
+  font-size: 14px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.lineRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.lineInput {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 10px 14px;
   font: inherit;
   font-size: 14px;
   color: #0f172a;
@@ -197,9 +214,44 @@
     background-color 0.15s ease;
 }
 
-.textarea:focus {
+.lineInput:focus {
   border-color: #111827;
   background: #ffffff;
+}
+
+.lineRemoveButton {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lineRemoveButton:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.addLineButton {
+  width: 100%;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: transparent;
+  color: #475569;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.addLineButton:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
 }
 
 .submitButton {
