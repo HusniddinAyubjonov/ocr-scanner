@@ -76,15 +76,15 @@ const normalizeLookalikes = (value: string): string =>
   value.replace(/[АаВЕеЅѕКМНОоРрСсТХхУуІі]/g, (char) => CYRILLIC_TO_LATIN[char] ?? char)
 
 // Document numbers are always "one letter, then only digits" — Tesseract
-// frequently reads a digit 0 as the letter O (identical glyph in most fonts),
-// so anything after the first character that isn't a digit is almost
-// certainly a misread zero.
+// frequently reads a digit 0 as a similar-looking letter (O, D, Q...), so
+// any non-digit after the first character is almost certainly a misread
+// zero, whichever letter it came out as.
 const fixDocumentNumberDigits = (value: string): string => {
   if (value.length < 2) {
     return value
   }
 
-  return normalizeLookalikes(value[0]) + value.slice(1).replace(/O/gi, "0")
+  return normalizeLookalikes(value[0]) + value.slice(1).replace(/[^0-9]/g, "0")
 }
 
 const hasEnoughLetters = (text: string): boolean =>
@@ -143,7 +143,7 @@ const SURNAME_LABEL = [/насаб/i, /surname/i]
 const GIVEN_NAME_LABEL = [/^ном\//i]
 
 const LABEL_LINE_MARKERS =
-  /насаб|surname|номи\s*падар|father|чинс|\bsex\b|[чц]ои\s*таваллуд|place\s*of\s*birth|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
+  /насаб|surname|номи\s*падар|father|чинс|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
 
 const isKnownLabelLine = (line: string): boolean =>
   LABEL_LINE_MARKERS.test(line) ||
@@ -259,10 +259,10 @@ const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean
 const extractLabeledField = (
   lines: string[],
   labelPatterns: RegExp[],
-  skipIf?: (line: string) => boolean,
+  options?: { skipIf?: (line: string) => boolean; inlineOnly?: boolean },
 ): string => {
   for (let i = 0; i < lines.length; i += 1) {
-    if (skipIf?.(lines[i])) {
+    if (options?.skipIf?.(lines[i])) {
       continue
     }
 
@@ -279,6 +279,14 @@ const extractLabeledField = (
 
     if (remainder && looksLikeInlineValue(remainder)) {
       return remainder
+    }
+
+    // Blood group in particular has never once had a genuine value on the
+    // following line across every real scan seen so far — whatever's there
+    // always turns out to belong to some other field (authority, an ID
+    // number...). Fields marked inlineOnly stop here instead of guessing.
+    if (options?.inlineOnly) {
+      continue
     }
 
     const next = lines[i + 1]?.trim()
@@ -362,14 +370,15 @@ export const extractIdCardFields = (text: string): IdCardFields => {
 
   const fromLabels: Partial<IdCardFields> = {
     fatherName: extractLabeledField(lines, FIELD_LABELS.fatherName),
-    birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, isBirthRowHeader),
+    birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, { skipIf: isBirthRowHeader }),
     authority: extractLabeledField(lines, FIELD_LABELS.authority),
     documentNumber: extractLabeledField(lines, FIELD_LABELS.documentNumber),
     maritalStatus: extractLabeledField(lines, FIELD_LABELS.maritalStatus),
-    bloodGroup: extractLabeledField(lines, FIELD_LABELS.bloodGroup),
+    bloodGroup: extractLabeledField(lines, FIELD_LABELS.bloodGroup, { inlineOnly: true }),
     personalIdNumber: extractPersonalIdNumber(lines),
-    address: extractAddress(lines),
   }
+
+  fromLabels.address = extractAddress(lines)
 
   fromLabels.surname = findCapsWordAfterLabel(lines, SURNAME_LABEL)
   fromLabels.givenNames = findCapsWordAfterLabel(lines, GIVEN_NAME_LABEL)
@@ -453,10 +462,20 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   // The MRZ line carrying it is sometimes too short/garbled to trust
   // (parseMrz then skips it entirely) — fall back to the first date found
   // anywhere in the text that isn't already claimed as the issue/expiry
-  // date (OCR sometimes merges the birth date onto an unrelated line, e.g.
-  // the address, so this can't require the whole line to be just a date).
+  // date. A date sharing its line with "сол" ("year") is the address's
+  // registration date ("... since 10.01.2018, year") printed as a fixed
+  // administrative note, not the birth date, even when nothing else in the
+  // text is a better candidate.
+  // No \b here: JS regex word boundaries only recognize ASCII word
+  // characters, so \b around Cyrillic text silently never matches.
+  const REGISTRATION_DATE_MARKER = /сол/i
+
   if (!fields.birthDate) {
     for (const line of lines) {
+      if (REGISTRATION_DATE_MARKER.test(line)) {
+        continue
+      }
+
       const match = line.match(DATE_PATTERN)
       const candidate = match?.[0]
 
