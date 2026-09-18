@@ -5,7 +5,11 @@ import type { ChangeEvent } from "react"
 import { createWorker, PSM } from "tesseract.js"
 import { Modal } from "@/ui-component/modal/modal.component"
 import { extractCleanText, preprocessImage } from "./home.utils"
-import { EMPTY_ID_CARD_FIELDS, extractIdCardFields, isIdCardText } from "./id-card.utils"
+import {
+  EMPTY_ID_CARD_FIELDS,
+  extractIdCardFields,
+  isIdCardText,
+} from "./id-card.utils"
 import type { IdCardFields } from "./id-card.utils"
 import styles from "./home.module.css"
 
@@ -20,8 +24,20 @@ type Slot = {
 }
 
 const INITIAL_SLOTS: Slot[] = [
-  { label: "Фото 1 (лицевая сторона)", image: null, isRecognizing: false, progress: 0, error: null },
-  { label: "Фото 2 (оборотная сторона)", image: null, isRecognizing: false, progress: 0, error: null },
+  {
+    label: "Фото 1 (лицевая сторона)",
+    image: null,
+    isRecognizing: false,
+    progress: 0,
+    error: null,
+  },
+  {
+    label: "Фото 2 (оборотная сторона)",
+    image: null,
+    isRecognizing: false,
+    progress: 0,
+    error: null,
+  },
 ]
 
 const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
@@ -44,21 +60,30 @@ const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
 
 export const Home = () => {
   const [slots, setSlots] = useState<Slot[]>(INITIAL_SLOTS)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rawTexts, setRawTexts] = useState<string[]>(["", ""])
   const [recognizedText, setRecognizedText] = useState("")
   const [isIdCard, setIsIdCard] = useState(false)
-  const [idCardFields, setIdCardFields] = useState<IdCardFields>(EMPTY_ID_CARD_FIELDS)
+  const [idCardFields, setIdCardFields] =
+    useState<IdCardFields>(EMPTY_ID_CARD_FIELDS)
   const [showRawText, setShowRawText] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const updateSlot = (index: number, patch: Partial<Slot>) => {
-    setSlots((current) => current.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)))
+    setSlots((current) =>
+      current.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)),
+    )
   }
 
   const runRecognition = async (index: number, selectedFile: File) => {
     const imageUrl = URL.createObjectURL(selectedFile)
 
-    updateSlot(index, { image: imageUrl, isRecognizing: true, progress: 0, error: null })
+    updateSlot(index, {
+      image: imageUrl,
+      isRecognizing: true,
+      progress: 0,
+      error: null,
+    })
 
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null
 
@@ -75,13 +100,19 @@ export const Home = () => {
 
       await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO })
 
-      const result = await worker.recognize(processedImageUrl, {}, { blocks: true })
+      const result = await worker.recognize(
+        processedImageUrl,
+        {},
+        { blocks: true },
+      )
 
       URL.revokeObjectURL(processedImageUrl)
 
       const newText = extractCleanText(result.data)
 
-      setRecognizedText((current) => (current.trim() ? `${current}\n${newText}` : newText))
+      setRecognizedText((current) =>
+        current.trim() ? `${current}\n${newText}` : newText,
+      )
 
       setRawTexts((current) => {
         const next = current.map((text, i) => (i === index ? newText : text))
@@ -108,7 +139,10 @@ export const Home = () => {
     }
   }
 
-  const handleImageChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (
+    index: number,
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
     const selectedFile = event.target.files?.[0]
 
     // reset the input so selecting the same file again still fires onChange
@@ -189,7 +223,9 @@ export const Home = () => {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <p className={styles.dropzoneTitle}>Выбрать или сфотографировать документ</p>
+                <p className={styles.dropzoneTitle}>
+                  Выбрать или сфотографировать документ
+                </p>
                 <p className={styles.dropzoneHint}>
                   Откроется выбор: камера или файл/галерея
                 </p>
@@ -207,7 +243,11 @@ export const Home = () => {
             {slot.image && (
               <div className={styles.previewBlock}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={slot.image} alt="Document preview" className={styles.previewImage} />
+                <img
+                  src={slot.image}
+                  alt="Document preview"
+                  className={styles.previewImage}
+                />
 
                 <button
                   type="button"
@@ -228,12 +268,17 @@ export const Home = () => {
                   <span>{slot.progress}%</span>
                 </div>
                 <div className={styles.progressTrack}>
-                  <div className={styles.progressFill} style={{ width: `${slot.progress}%` }} />
+                  <div
+                    className={styles.progressFill}
+                    style={{ width: `${slot.progress}%` }}
+                  />
                 </div>
               </div>
             )}
 
-            {slot.error && <div className={styles.errorBlock}>{slot.error}</div>}
+            {slot.error && (
+              <div className={styles.errorBlock}>{slot.error}</div>
+            )}
           </div>
         ))}
 
@@ -243,16 +288,23 @@ export const Home = () => {
               {ID_CARD_FIELD_LABELS.map(({ key, label }) => (
                 <div
                   key={key}
-                  className={key === "address" ? styles.fieldRowWide : styles.fieldRow}
+                  className={
+                    key === "address" ? styles.fieldRowWide : styles.fieldRow
+                  }
                 >
-                  <label htmlFor={`id-field-${key}`} className={styles.fieldLabel}>
+                  <label
+                    htmlFor={`id-field-${key}`}
+                    className={styles.fieldLabel}
+                  >
                     {label}
                   </label>
                   <input
                     id={`id-field-${key}`}
                     type="text"
                     value={idCardFields[key]}
-                    onChange={(event) => handleIdFieldChange(key, event.target.value)}
+                    onChange={(event) =>
+                      handleIdFieldChange(key, event.target.value)
+                    }
                     placeholder="Не найдено"
                     className={styles.fieldInput}
                   />
@@ -265,7 +317,9 @@ export const Home = () => {
               onClick={() => setShowRawText((current) => !current)}
               className={styles.toggleRawButton}
             >
-              {showRawText ? "Скрыть весь распознанный текст" : "Показать весь распознанный текст"}
+              {showRawText
+                ? "Скрыть весь распознанный текст"
+                : "Показать весь распознанный текст"}
             </button>
 
             {showRawText && (

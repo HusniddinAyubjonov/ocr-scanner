@@ -5,9 +5,6 @@ const MAX_UPSCALE = 2.5
 const CLIP_PERCENT = 0.02
 const MIN_WORD_CONFIDENCE = 60
 
-// Tesseract still tries to read text out of photos/icons/logos on a document —
-// those regions come back as real words but with low confidence, so filtering
-// by confidence strips that garbage while keeping the actual text.
 export const extractCleanText = (page: Page): string => {
   if (!page.blocks) {
     return page.text

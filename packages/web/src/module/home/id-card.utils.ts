@@ -37,15 +37,8 @@ export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
 const ID_CARD_MARKERS = /шиноснома|identity\s*card|republic\s*of\s*tajikistan|то[чц]икистон/i
 const MRZ_LINE_PATTERN = /^[A-Z0-9<]{20,32}$/
 const DATE_PATTERN = /\d{1,2}[.\/]\d{1,2}[.\/]\d{2,4}/
-// No trailing "-" here: it's meaningful in real values (e.g. blood group "A(II)Rh-").
 const SEPARATOR_TRIM = /^[\s:/.,-]+|[\s:/.,]+$/g
 
-// A Cyrillic name printed in caps is always immediately followed by its Latin
-// transliteration on the next line (e.g. "АЮБОВ" / "AYUBOV"). That pairing
-// survives OCR far better than the printed labels do — on a real scan the
-// Cyrillic label "Насаб" itself came back as "Haca6" (Latin/Cyrillic
-// lookalikes mixed up), so matching the label text is unreliable. The card
-// prints surname, given name, then father's name in that fixed order.
 const CYRILLIC_CAPS_WORD = /^[А-ЯЁЎҚҒҲҶӢӮ]{2,}$/
 const LATIN_CAPS_WORD = /^[A-Z]{2,}$/
 
@@ -62,12 +55,8 @@ const FIELD_LABELS: Record<
 }
 
 const PERSONAL_ID_LABEL = /\bid\s*number\b/i
-// OCR sometimes clips the leading letter off short words at a crop edge
-// ("Address" -> "ddress"), so the leading "A" is optional here.
 const ADDRESS_LABEL = /\ba?ddress\b/i
 
-// Anything that reads as a label/header rather than actual data — used to
-// know where a multi-line value (like an address) ends.
 const LABEL_LINE_MARKERS =
   /насаб|surname|номи\s*падар|father|чинс|\bsex\b|[чц]ои\s*таваллуд|place\s*of\s*birth|рак[а]?ми?\s*шиноснома|document\s*(id\s*)?no|мақоми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гуру[хҳ]и\s*хун|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
 
@@ -103,11 +92,6 @@ const formatMrzDate = (chars: string): string => {
   return `${dd}.${mm}.${year}`
 }
 
-// The MRZ (3-line machine-readable block on the back) is the most reliable
-// source when it comes through cleanly, but it's tiny monospaced text and
-// often gets mangled beyond recovery — findMrzLines only accepts lines that
-// still look like a real MRZ row, so a garbled scan just yields nothing here
-// instead of producing garbage.
 const parseMrz = (lines: string[]): Partial<IdCardFields> => {
   const mrzLines = findMrzLines(lines)
 
@@ -159,9 +143,6 @@ const findNamePairs = (lines: string[]): string[] => {
   return pairs
 }
 
-// Card prints a header row ("Sex Nationality Date of birth Place of") with
-// the actual values on the very next row, space-separated — not a per-field
-// label/value line like the rest of the card.
 const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean): string[] => {
   const headerIndex = lines.findIndex(isHeader)
 
@@ -220,9 +201,6 @@ const extractAddress = (lines: string[]): string => {
   return collected.join(", ")
 }
 
-// The label line itself is unreliable here (OCR sometimes prepends garbled
-// fragments of a neighbouring word), so trust only a clean all-digits next
-// line rather than whatever text remains after stripping the label.
 const extractPersonalIdNumber = (lines: string[]): string => {
   const labelIndex = lines.findIndex((line) => PERSONAL_ID_LABEL.test(line))
 
