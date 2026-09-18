@@ -47,6 +47,21 @@
   color: #64748b;
 }
 
+.slot {
+  margin-bottom: 20px;
+}
+
+.slot:last-of-type {
+  margin-bottom: 0;
+}
+
+.slotLabel {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
 .dropzone {
   display: flex;
   flex-direction: column;
@@ -55,7 +70,7 @@
   cursor: pointer;
   border-radius: 16px;
   border: 2px dashed #cbd5e1;
-  padding: 44px 24px;
+  padding: 32px 24px;
   text-align: center;
   color: #334155;
   background: #f8fafc;
@@ -100,7 +115,7 @@
 
 .previewImage {
   display: block;
-  max-height: 360px;
+  max-height: 220px;
   width: 100%;
   object-fit: contain;
 }

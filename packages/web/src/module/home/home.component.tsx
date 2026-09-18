@@ -9,22 +9,32 @@ import styles from "./home.module.css"
 
 const OCR_LANGUAGES = "eng+rus+tgk"
 
+type Slot = {
+  label: string
+  image: string | null
+  isRecognizing: boolean
+  progress: number
+  error: string | null
+}
+
+const INITIAL_SLOTS: Slot[] = [
+  { label: "Фото 1 (лицевая сторона)", image: null, isRecognizing: false, progress: 0, error: null },
+  { label: "Фото 2 (оборотная сторона)", image: null, isRecognizing: false, progress: 0, error: null },
+]
+
 export const Home = () => {
-  const [image, setImage] = useState<string | null>(null)
+  const [slots, setSlots] = useState<Slot[]>(INITIAL_SLOTS)
   const [recognizedText, setRecognizedText] = useState("")
-  const [isRecognizing, setIsRecognizing] = useState(false)
-  const [recognizeProgress, setRecognizeProgress] = useState(0)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  const runRecognition = async (selectedFile: File) => {
+  const updateSlot = (index: number, patch: Partial<Slot>) => {
+    setSlots((current) => current.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)))
+  }
+
+  const runRecognition = async (index: number, selectedFile: File) => {
     const imageUrl = URL.createObjectURL(selectedFile)
 
-    setImage(imageUrl)
-    setRecognizedText("")
-    setErrorMessage(null)
-    setRecognizeProgress(0)
-    setIsRecognizing(true)
+    updateSlot(index, { image: imageUrl, isRecognizing: true, progress: 0, error: null })
 
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null
 
@@ -34,7 +44,7 @@ export const Home = () => {
       worker = await createWorker(OCR_LANGUAGES, 1, {
         logger: (message) => {
           if (message.status === "recognizing text") {
-            setRecognizeProgress(Math.round(message.progress * 100))
+            updateSlot(index, { progress: Math.round(message.progress * 100) })
           }
         },
       })
@@ -45,23 +55,26 @@ export const Home = () => {
 
       URL.revokeObjectURL(processedImageUrl)
 
-      setRecognizedText(extractCleanText(result.data))
+      const newText = extractCleanText(result.data)
+
+      setRecognizedText((current) => (current.trim() ? `${current}\n${newText}` : newText))
     } catch (error) {
       console.error("OCR error:", error)
-      setErrorMessage(
-        error instanceof Error
-          ? `Не удалось распознать текст: ${error.message}`
-          : "Не удалось распознать текст. Проверьте подключение к интернету и попробуйте снова.",
-      )
+      updateSlot(index, {
+        error:
+          error instanceof Error
+            ? `Не удалось распознать текст: ${error.message}`
+            : "Не удалось распознать текст. Проверьте подключение к интернету и попробуйте снова.",
+      })
     } finally {
       if (worker) {
         await worker.terminate()
       }
-      setIsRecognizing(false)
+      updateSlot(index, { isRecognizing: false })
     }
   }
 
-  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
 
     // reset the input so selecting the same file again still fires onChange
@@ -71,14 +84,11 @@ export const Home = () => {
       return
     }
 
-    void runRecognition(selectedFile)
+    void runRecognition(index, selectedFile)
   }
 
-  const handleRemoveImage = () => {
-    setImage(null)
-    setRecognizedText("")
-    setErrorMessage(null)
-    setRecognizeProgress(0)
+  const handleRemoveImage = (index: number) => {
+    updateSlot(index, { image: null, error: null, progress: 0 })
   }
 
   const handleSubmit = () => {
@@ -86,7 +96,7 @@ export const Home = () => {
       return
     }
 
-    setImage(null)
+    setSlots(INITIAL_SLOTS)
     setRecognizedText("")
     setIsModalOpen(true)
   }
@@ -94,6 +104,8 @@ export const Home = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false)
   }
+
+  const isRecognizing = slots.some((slot) => slot.isRecognizing)
 
   return (
     <main className={styles.main}>
@@ -104,75 +116,80 @@ export const Home = () => {
           <p className={styles.subtitle}>Русский · English · Тоҷикӣ · 0–9</p>
         </div>
 
-        {!image && (
-          <label htmlFor="document" className={styles.dropzone}>
-            <svg
-              className={styles.dropzoneIcon}
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M12 16V4M12 4L7 9M12 4L17 9"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <p className={styles.dropzoneTitle}>Выбрать или сфотографировать документ</p>
-            <p className={styles.dropzoneHint}>
-              На телефоне откроется камера, на компьютере — выбор файла
-            </p>
-          </label>
-        )}
+        {slots.map((slot, index) => (
+          <div key={slot.label} className={styles.slot}>
+            <p className={styles.slotLabel}>{slot.label}</p>
 
-        <input
-          id="document"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleImageChange}
-          className={styles.hiddenInput}
-        />
+            {!slot.image && (
+              <label htmlFor={`document-${index}`} className={styles.dropzone}>
+                <svg
+                  className={styles.dropzoneIcon}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 16V4M12 4L7 9M12 4L17 9"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <p className={styles.dropzoneTitle}>Выбрать или сфотографировать документ</p>
+                <p className={styles.dropzoneHint}>
+                  Откроется выбор: камера или файл/галерея
+                </p>
+              </label>
+            )}
 
-        {image && (
-          <div className={styles.previewBlock}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={image} alt="Document preview" className={styles.previewImage} />
+            <input
+              id={`document-${index}`}
+              type="file"
+              accept="image/*"
+              onChange={(event) => handleImageChange(index, event)}
+              className={styles.hiddenInput}
+            />
 
-            <button
-              type="button"
-              onClick={handleRemoveImage}
-              disabled={isRecognizing}
-              className={styles.removeButton}
-              aria-label="Удалить документ"
-            >
-              ✕
-            </button>
+            {slot.image && (
+              <div className={styles.previewBlock}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={slot.image} alt="Document preview" className={styles.previewImage} />
+
+                <button
+                  type="button"
+                  onClick={() => handleRemoveImage(index)}
+                  disabled={slot.isRecognizing}
+                  className={styles.removeButton}
+                  aria-label="Удалить документ"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {slot.isRecognizing && (
+              <div className={styles.progressBlock}>
+                <div className={styles.progressLabel}>
+                  <span>Распознаём текст</span>
+                  <span>{slot.progress}%</span>
+                </div>
+                <div className={styles.progressTrack}>
+                  <div className={styles.progressFill} style={{ width: `${slot.progress}%` }} />
+                </div>
+              </div>
+            )}
+
+            {slot.error && <div className={styles.errorBlock}>{slot.error}</div>}
           </div>
-        )}
-
-        {isRecognizing && (
-          <div className={styles.progressBlock}>
-            <div className={styles.progressLabel}>
-              <span>Распознаём текст</span>
-              <span>{recognizeProgress}%</span>
-            </div>
-            <div className={styles.progressTrack}>
-              <div className={styles.progressFill} style={{ width: `${recognizeProgress}%` }} />
-            </div>
-          </div>
-        )}
-
-        {errorMessage && <div className={styles.errorBlock}>{errorMessage}</div>}
+        ))}
 
         <div className={styles.textareaBlock}>
           <label htmlFor="recognizedText" className={styles.textareaLabel}>
@@ -184,7 +201,7 @@ export const Home = () => {
             value={recognizedText}
             onChange={(event) => setRecognizedText(event.target.value)}
             placeholder="Здесь появится распознанный текст..."
-            rows={6}
+            rows={8}
             className={styles.textarea}
           />
         </div>
