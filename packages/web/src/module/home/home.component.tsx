@@ -147,7 +147,6 @@ export const Home = () => {
   ) => {
     const selectedFile = event.target.files?.[0]
 
-    // reset the input so selecting the same file again still fires onChange
     event.target.value = ""
 
     if (!selectedFile) {
