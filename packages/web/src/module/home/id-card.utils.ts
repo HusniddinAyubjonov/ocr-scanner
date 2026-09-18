@@ -96,7 +96,7 @@ const hasEnoughLetters = (text: string): boolean =>
 // stripped bilingual label separator; a "/" with no space around it is
 // legitimate inline data (e.g. "МУЧАРРАД/SINGLE"), so only the spaced form
 // counts as noise.
-const HARD_NOISE_CHARACTERS = /[|«»"]/
+const HARD_NOISE_CHARACTERS = /[|«»"[\]]/
 const SPACED_SLASH = /\s\/|\/\s/
 
 // Rejects OCR noise (stray separators, near-empty fragments) that would
@@ -129,7 +129,10 @@ const FIELD_LABELS: Record<
   authority: [/ма[кқ]оми(\s*шиносномадиханда)?/i, /\bauthority\b/i],
   documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?no\.?/i],
   maritalStatus: [/вазъи\s*оилав[^\s/]*/i, /marital\s*status/i],
-  bloodGroup: [/гуру[хҳ]и\s*хун[^\s/]*/i, /blood\s*group/i],
+  // The word after "гурӯҳи" ("group") varies wildly by OCR pass (хун, кум,
+  // ...) — just recognizing "гурӯҳи" itself is enough to treat the line as
+  // this label and stop it from bleeding into whatever field comes next.
+  bloodGroup: [/гур[ӯу][хҳ]и/i, /blood\s*group/i],
 }
 
 // OCR sometimes reads the leading "I" of "ID number" as the digit "1".
@@ -140,7 +143,7 @@ const SURNAME_LABEL = [/насаб/i, /surname/i]
 const GIVEN_NAME_LABEL = [/^ном\//i]
 
 const LABEL_LINE_MARKERS =
-  /насаб|surname|номи\s*падар|father|чинс|\bsex\b|[чц]ои\s*таваллуд|place\s*of\s*birth|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гуру[хҳ]и\s*хун|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
+  /насаб|surname|номи\s*падар|father|чинс|\bsex\b|[чц]ои\s*таваллуд|place\s*of\s*birth|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
 
 const isKnownLabelLine = (line: string): boolean =>
   LABEL_LINE_MARKERS.test(line) ||
@@ -282,6 +285,18 @@ const extractLabeledField = (
 
     if (next && !isKnownLabelLine(next) && looksLikeValue(next)) {
       return next
+    }
+
+    // OCR occasionally inserts a stray one/two-character junk line right
+    // after the label (a misread speck, not real content) — if the
+    // immediate next line is too short to be real data, try the one after
+    // that before giving up on this label entirely.
+    if (next && next.length <= 2 && !isKnownLabelLine(next)) {
+      const nextAfter = lines[i + 2]?.trim()
+
+      if (nextAfter && !isKnownLabelLine(nextAfter) && looksLikeValue(nextAfter)) {
+        return nextAfter
+      }
     }
   }
 
@@ -478,8 +493,14 @@ export const extractIdCardFields = (text: string): IdCardFields => {
 
   // A garbled label run can fuse straight into the value with no separator
   // ("MYYAPPAYSINGLE") — if a known status word is recognizable inside it,
-  // that word alone is a cleaner result than the whole fused string.
-  const maritalStatusMatch = fields.maritalStatus.match(/married|single|divorced|widowed/i)
+  // that word alone is a cleaner result than the whole fused string. When
+  // the label itself is missing entirely, the status word can still show up
+  // unlabeled on some other line, so this checks the whole text as a last
+  // resort.
+  const statusPattern = /married|single|divorced|widowed/i
+  const maritalStatusMatch =
+    fields.maritalStatus.match(statusPattern) ?? lines.map((line) => line.match(statusPattern)).find(Boolean)
+
   if (maritalStatusMatch) {
     fields.maritalStatus = maritalStatusMatch[0].toUpperCase()
   }
