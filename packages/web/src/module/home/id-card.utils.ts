@@ -114,6 +114,14 @@ const MAX_INLINE_VALUE_LENGTH = 20
 const looksLikeInlineValue = (text: string): boolean =>
   looksLikeValue(text) && text.length <= MAX_INLINE_VALUE_LENGTH
 
+// Generic "short text with enough letters" is too permissive for blood
+// group specifically — a fragment of an unrelated neighbouring label
+// ("Tax Payer ID number") passes that check just as easily as a real value.
+// A genuine blood type is always A/B/O/AB, optionally with a group number
+// and Rh factor (e.g. "A(I)Rh-", "O(I)Rh+", "AB(IV)Rh").
+const looksLikeBloodGroup = (text: string): boolean =>
+  /^(AB|[ABO])\s*\(?(I{1,3}|IV)?\)?\s*Rh\.?\s*[+-]?$/i.test(text.trim())
+
 const FIELD_LABELS: Record<
   "fatherName" | "birthPlace" | "authority" | "documentNumber" | "maritalStatus" | "bloodGroup",
   RegExp[]
@@ -129,10 +137,12 @@ const FIELD_LABELS: Record<
   authority: [/ма[кқ]оми(\s*шиносномадиханда)?/i, /\bauthority\b/i],
   documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?no\.?/i],
   maritalStatus: [/вазъи\s*оилав[^\s/]*/i, /marital\s*status/i],
-  // The word after "гурӯҳи" ("group") varies wildly by OCR pass (хун, кум,
-  // ...) — just recognizing "гурӯҳи" itself is enough to treat the line as
-  // this label and stop it from bleeding into whatever field comes next.
-  bloodGroup: [/гур[ӯу][хҳ]и/i, /blood\s*group/i],
+  // The word(s) after "гурӯҳи" ("group") vary wildly by OCR pass (хун, кум,
+  // хун ва резуси, ...) — this is descriptive label text ("blood group and
+  // Rh factor"), not data, so it's consumed too when present; otherwise just
+  // recognizing "гурӯҳи" itself is enough to treat the line as this label
+  // and stop it from bleeding into whatever field comes next.
+  bloodGroup: [/гур[ӯу][хҳ]и(\s*хун(\s*ва\s*резуси)?)?/i, /blood\s*group/i],
 }
 
 // OCR sometimes reads the leading "I" of "ID number" as the digit "1".
@@ -239,9 +249,18 @@ const findNamePairs = (lines: string[]): string[] => {
 // contains the English phrase "place of birth" — extractLabeledField must not
 // mistake that header for a dedicated birthPlace label, or it falls through
 // to the header's own value row (sex + birth date) as if it were the value.
+// "Sex" itself sometimes drops out of the header entirely, leaving just
+// "Date of birth Place of birth" on one line — that combination alone is
+// still enough to know it's a header, not a real birthPlace label (matching
+// just "place of birth" there strips only half the header, leaving "Date of
+// birth" behind looking like a value).
 const isBirthRowHeader = (line: string): boolean => {
   const normalized = normalizeLookalikes(line)
-  return /\bsex\b/i.test(normalized) && /date\s*of\s*birth/i.test(normalized)
+  const hasSex = /\bsex\b/i.test(normalized)
+  const hasDateOfBirth = /date\s*of\s*birth/i.test(normalized)
+  const hasPlaceOfBirth = /place\s*of\s*birth/i.test(normalized)
+
+  return (hasSex && hasDateOfBirth) || (hasDateOfBirth && hasPlaceOfBirth)
 }
 
 const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean): string[] => {
@@ -259,8 +278,14 @@ const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean
 const extractLabeledField = (
   lines: string[],
   labelPatterns: RegExp[],
-  options?: { skipIf?: (line: string) => boolean; inlineOnly?: boolean },
+  options?: {
+    skipIf?: (line: string) => boolean
+    inlineOnly?: boolean
+    isValidValue?: (value: string) => boolean
+  },
 ): string => {
+  const isValidValue = options?.isValidValue ?? looksLikeInlineValue
+
   for (let i = 0; i < lines.length; i += 1) {
     if (options?.skipIf?.(lines[i])) {
       continue
@@ -277,7 +302,7 @@ const extractLabeledField = (
     }
     remainder = remainder.replace(SEPARATOR_TRIM, "").trim()
 
-    if (remainder && looksLikeInlineValue(remainder)) {
+    if (remainder && isValidValue(remainder)) {
       return remainder
     }
 
@@ -374,7 +399,10 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     authority: extractLabeledField(lines, FIELD_LABELS.authority),
     documentNumber: extractLabeledField(lines, FIELD_LABELS.documentNumber),
     maritalStatus: extractLabeledField(lines, FIELD_LABELS.maritalStatus),
-    bloodGroup: extractLabeledField(lines, FIELD_LABELS.bloodGroup, { inlineOnly: true }),
+    bloodGroup: extractLabeledField(lines, FIELD_LABELS.bloodGroup, {
+      inlineOnly: true,
+      isValidValue: looksLikeBloodGroup,
+    }),
     personalIdNumber: extractPersonalIdNumber(lines),
   }
 
