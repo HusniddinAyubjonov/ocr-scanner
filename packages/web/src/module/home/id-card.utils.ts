@@ -5,6 +5,7 @@ export type IdCardFields = {
   sex: string
   birthDate: string
   birthPlace: string
+  citizenship: string
   address: string
   personalIdNumber: string
   authority: string
@@ -23,6 +24,7 @@ export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
   sex: "",
   birthDate: "",
   birthPlace: "",
+  citizenship: "",
   address: "",
   personalIdNumber: "",
   authority: "",
@@ -34,7 +36,8 @@ export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
   bloodGroup: "",
 }
 
-const ID_CARD_MARKERS = /шиноснома|identity\s*card|republic\s*of\s*tajikistan|то[чц]икистон/i
+const ID_CARD_MARKERS =
+  /шиноснома|identity\s*card|republic\s*of\s*tajikistan|то[чц]икистон/i
 const MRZ_LINE_PATTERN = /^[A-Z0-9<]{20,32}$/
 const DATE_PATTERN = /\d{1,2}[.\/]\d{1,2}[.\/]\d{2,4}/
 const SEPARATOR_TRIM = /^[\s:/|.,-]+|[\s:/|.,]+$/g
@@ -73,7 +76,10 @@ const CYRILLIC_TO_LATIN: Record<string, string> = {
 }
 
 const normalizeLookalikes = (value: string): string =>
-  value.replace(/[АаВЕеЅѕКМНОоРрСсТХхУуІі]/g, (char) => CYRILLIC_TO_LATIN[char] ?? char)
+  value.replace(
+    /[АаВЕеЅѕКМНОоРрСсТХхУуІі]/g,
+    (char) => CYRILLIC_TO_LATIN[char] ?? char,
+  )
 
 // Document numbers are always "one letter, then only digits" — Tesseract
 // frequently reads a digit 0 as a similar-looking letter (O, D, Q...), so
@@ -102,7 +108,9 @@ const SPACED_SLASH = /\s\/|\/\s/
 // Rejects OCR noise (stray separators, near-empty fragments) that would
 // otherwise be mistaken for a genuine field value.
 const looksLikeValue = (text: string): boolean =>
-  !HARD_NOISE_CHARACTERS.test(text) && !SPACED_SLASH.test(text) && hasEnoughLetters(text)
+  !HARD_NOISE_CHARACTERS.test(text) &&
+  !SPACED_SLASH.test(text) &&
+  hasEnoughLetters(text)
 
 const MAX_INLINE_VALUE_LENGTH = 20
 
@@ -123,7 +131,12 @@ const looksLikeBloodGroup = (text: string): boolean =>
   /^(AB|[ABO])\s*\(?(I{1,3}|IV)?\)?\s*Rh\.?\s*[+-]?$/i.test(text.trim())
 
 const FIELD_LABELS: Record<
-  "fatherName" | "birthPlace" | "authority" | "documentNumber" | "maritalStatus" | "bloodGroup",
+  | "fatherName"
+  | "birthPlace"
+  | "authority"
+  | "documentNumber"
+  | "maritalStatus"
+  | "bloodGroup",
   RegExp[]
 > = {
   // OCR is inconsistent about the "қ"/"ҳ"/"ӣ" hooks — sometimes keeps them,
@@ -237,7 +250,10 @@ const findNamePairs = (lines: string[]): string[] => {
   const pairs: string[] = []
 
   for (let i = 0; i < lines.length - 1; i += 1) {
-    if (CYRILLIC_CAPS_WORD.test(lines[i]) && LATIN_CAPS_WORD.test(lines[i + 1])) {
+    if (
+      CYRILLIC_CAPS_WORD.test(lines[i]) &&
+      LATIN_CAPS_WORD.test(lines[i + 1])
+    ) {
       pairs.push(lines[i])
     }
   }
@@ -263,7 +279,10 @@ const isBirthRowHeader = (line: string): boolean => {
   return (hasSex && hasDateOfBirth) || (hasDateOfBirth && hasPlaceOfBirth)
 }
 
-const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean): string[] => {
+const findRowAfterHeader = (
+  lines: string[],
+  isHeader: (line: string) => boolean,
+): string[] => {
   const headerIndex = lines.findIndex(isHeader)
 
   if (headerIndex === -1) {
@@ -323,7 +342,11 @@ const extractLabeledField = (
     if (next && next.length <= 2 && !isKnownLabelLine(next)) {
       const nextAfter = lines[i + 2]?.trim()
 
-      if (nextAfter && !isKnownLabelLine(nextAfter) && looksLikeValue(nextAfter)) {
+      if (
+        nextAfter &&
+        !isKnownLabelLine(nextAfter) &&
+        looksLikeValue(nextAfter)
+      ) {
         return nextAfter
       }
     }
@@ -332,7 +355,10 @@ const extractLabeledField = (
   return ""
 }
 
-const findCapsWordAfterLabel = (lines: string[], labelPatterns: RegExp[]): string => {
+const findCapsWordAfterLabel = (
+  lines: string[],
+  labelPatterns: RegExp[],
+): string => {
   for (let i = 0; i < lines.length; i += 1) {
     if (!labelPatterns.some((pattern) => pattern.test(lines[i]))) {
       continue
@@ -365,7 +391,10 @@ const extractAddress = (lines: string[]): string => {
     // OCR sometimes merges an unrelated date (e.g. the birth date) onto the
     // same line as an address fragment — strip it so it doesn't pollute the
     // address text; extractIdCardFields picks it up separately as birthDate.
-    const cleaned = lines[i].replace(DATE_PATTERN, "").replace(/\s{2,}/g, " ").trim()
+    const cleaned = lines[i]
+      .replace(DATE_PATTERN, "")
+      .replace(/\s{2,}/g, " ")
+      .trim()
 
     if (cleaned) {
       collected.push(cleaned)
@@ -395,7 +424,9 @@ export const extractIdCardFields = (text: string): IdCardFields => {
 
   const fromLabels: Partial<IdCardFields> = {
     fatherName: extractLabeledField(lines, FIELD_LABELS.fatherName),
-    birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, { skipIf: isBirthRowHeader }),
+    birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, {
+      skipIf: isBirthRowHeader,
+    }),
     authority: extractLabeledField(lines, FIELD_LABELS.authority),
     documentNumber: extractLabeledField(lines, FIELD_LABELS.documentNumber),
     maritalStatus: extractLabeledField(lines, FIELD_LABELS.maritalStatus),
@@ -418,16 +449,18 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   const namesLookSame = (a: string, b: string): boolean =>
     a.toLowerCase().replace(/қ/g, "к") === b.toLowerCase().replace(/қ/g, "к")
 
-  const knownNames = [fromLabels.surname, fromLabels.givenNames, fromLabels.fatherName].filter(
-    (name): name is string => Boolean(name),
-  )
+  const knownNames = [
+    fromLabels.surname,
+    fromLabels.givenNames,
+    fromLabels.fatherName,
+  ].filter((name): name is string => Boolean(name))
   const availablePairs = findNamePairs(lines).filter(
     (pair) => !knownNames.some((known) => namesLookSame(known, pair)),
   )
 
-  const missingNameFields = (["surname", "givenNames", "fatherName"] as const).filter(
-    (key) => !fromLabels[key],
-  )
+  const missingNameFields = (
+    ["surname", "givenNames", "fatherName"] as const
+  ).filter((key) => !fromLabels[key])
   missingNameFields.forEach((key, index) => {
     if (availablePairs[index]) {
       fromLabels[key] = availablePairs[index]
@@ -435,15 +468,19 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   })
 
   const birthRow = findRowAfterHeader(lines, isBirthRowHeader)
-  const sexToken = birthRow.map(normalizeLookalikes).find((token) => /^[MF]+$/.test(token))
+  const sexToken = birthRow
+    .map(normalizeLookalikes)
+    .find((token) => /^[MF]+$/.test(token))
   const birthDateToken = birthRow.find((token) => DATE_PATTERN.test(token))
 
   if (sexToken) fromLabels.sex = sexToken[0]
-  if (birthDateToken) fromLabels.birthDate = birthDateToken.match(DATE_PATTERN)?.[0]
+  if (birthDateToken)
+    fromLabels.birthDate = birthDateToken.match(DATE_PATTERN)?.[0]
 
   const validityRow = findRowAfterHeader(
     lines,
-    (line) => /date\s*of\s*issue/i.test(line) && /date\s*of\s*expiry/i.test(line),
+    (line) =>
+      /date\s*of\s*issue/i.test(line) && /date\s*of\s*expiry/i.test(line),
   )
 
   if (validityRow[0]) fromLabels.issueDate = validityRow[0]
@@ -451,7 +488,9 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   if (validityRow[2]) fromLabels.nationalIdNumber = validityRow[2]
 
   if (fromLabels.documentNumber) {
-    fromLabels.documentNumber = fixDocumentNumberDigits(fromLabels.documentNumber)
+    fromLabels.documentNumber = fixDocumentNumberDigits(
+      fromLabels.documentNumber,
+    )
   }
 
   const fromMrz = parseMrz(lines)
@@ -480,7 +519,9 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   }
 
   if (!fields.nationalIdNumber) {
-    const longNumberMatch = lines.map((line) => line.match(/\b\d{12,14}\b/)).find(Boolean)
+    const longNumberMatch = lines
+      .map((line) => line.match(/\b\d{12,14}\b/))
+      .find(Boolean)
 
     if (longNumberMatch) {
       fields.nationalIdNumber = longNumberMatch[0]
@@ -507,7 +548,11 @@ export const extractIdCardFields = (text: string): IdCardFields => {
       const match = line.match(DATE_PATTERN)
       const candidate = match?.[0]
 
-      if (candidate && candidate !== fields.issueDate && candidate !== fields.expiryDate) {
+      if (
+        candidate &&
+        candidate !== fields.issueDate &&
+        candidate !== fields.expiryDate
+      ) {
         fields.birthDate = candidate
         break
       }
@@ -553,7 +598,8 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   // resort.
   const statusPattern = /married|single|divorced|widowed/i
   const maritalStatusMatch =
-    fields.maritalStatus.match(statusPattern) ?? lines.map((line) => line.match(statusPattern)).find(Boolean)
+    fields.maritalStatus.match(statusPattern) ??
+    lines.map((line) => line.match(statusPattern)).find(Boolean)
 
   if (maritalStatusMatch) {
     fields.maritalStatus = maritalStatusMatch[0].toUpperCase()

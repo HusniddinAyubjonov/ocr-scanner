@@ -1,46 +1,418 @@
-.main { min-height: 100vh; display: flex; justify-content: center; background: linear-gradient(180deg,#eef2ff,#f8fafc 45%); padding: 48px 20px; }
-.card { width: 100%; max-width: 860px; border-radius: 24px; background: #fff; padding: 32px; box-shadow: 0 20px 40px -12px rgba(15,23,42,.12); }
-.header { margin-bottom: 28px; text-align: center; }
-.badge { display: inline-block; margin-bottom: 12px; padding: 5px 12px; border-radius: 999px; background: #111827; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
-.title { font-size: 28px; color: #0f172a; }
-.subtitle { margin-top: 6px; font-size: 14px; color: #64748b; }
-.sourceActions { display: grid; gap: 10px; }
-.dropzone { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; border-radius: 16px; border: 2px dashed #cbd5e1; padding: 42px 24px; text-align: center; color: #334155; background: #f8fafc; }
-.dropzone:hover { border-color: #6366f1; background: #eef2ff; }
-.dropzoneIcon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #e0e7ff; color: #4338ca; font-size: 24px; }
-.dropzoneTitle { font-size: 16px; font-weight: 650; }
-.dropzoneHint,.helpText { font-size: 13px; color: #64748b; }
-.hiddenInput { display: none; }
-.primaryButton,.secondaryButton,.submitButton,.debugToggle { display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; padding: 11px 16px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-.primaryButton,.submitButton { border: 0; background: #111827; color: #fff; }
-.secondaryButton { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
-.primaryButton:disabled,.secondaryButton:disabled,.submitButton:disabled { opacity: .45; cursor: not-allowed; }
-.statusPanel { padding: 18px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; }
-.statusPanel > div:first-child { display: flex; align-items: center; gap: 10px; }
-.statusIcon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #dcfce7; color: #15803d; }
-.spinner { width: 22px; height: 22px; border: 3px solid #c7d2fe; border-top-color: #4338ca; border-radius: 50%; color: transparent; animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.progressTrack { height: 7px; margin-top: 14px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
-.progressFill { height: 100%; border-radius: inherit; background: #4f46e5; transition: width .2s; }
-.steps { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 16px; margin-top: 14px; list-style: none; font-size: 13px; }
-.stepComplete { color: #15803d; }.stepPending { color: #94a3b8; }
-.errorBlock { margin-top: 16px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; color: #b91c1c; padding: 14px 16px; }
-.editorBlock,.resultBlock,.debugBlock { margin-top: 24px; }
-.sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
-.sectionHeading h2 { font-size: 17px; }.sectionHeading span { font-size: 12px; color: #64748b; }
-.helpText { margin-bottom: 12px; }
-.inlineActions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.debugToggle { width: 100%; border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; }
-.debugGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 12px; }
-.debugGrid figure { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-.debugGrid figcaption { padding: 8px 10px; font-size: 12px; font-weight: 600; color: #475569; }
-.debugGrid img { display: block; width: 100%; height: 180px; object-fit: contain; background: #fff; }
-.debugGrid .bestVariant { border: 2px solid #22c55e; }
-.textarea { width: 100%; resize: vertical; border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; padding: 16px; font: inherit; font-size: 14px; line-height: 1.5; color: #0f172a; outline: none; }
-.textarea:focus { border-color: #4f46e5; background: #fff; }
-.fieldsBlock { margin: 24px 0; padding: 16px; border: 1px solid #e0e7ff; border-radius: 14px; background: #eef2ff; display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
-.fieldRow,.fieldRowWide { min-width: 0; }.fieldRowWide { grid-column: 1/-1; }
-.fieldLabel { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #3730a3; }
-.fieldInput { width: 100%; border: 1px solid #c7d2fe; border-radius: 10px; background: #fff; padding: 10px 12px; font: inherit; color: #0f172a; outline: none; }
-.submitButton { width: 100%; margin-top: 24px; padding: 14px 20px; font-size: 15px; }
-@media (max-width: 640px) { .main { padding: 18px 10px; }.card { padding: 20px 14px; border-radius: 18px; }.steps,.debugGrid,.fieldsBlock { grid-template-columns: 1fr; }.fieldRowWide { grid-column: auto; }.inlineActions > * { flex: 1; }.title { font-size: 23px; } }
+.main {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: linear-gradient(180deg, #eef2ff, #f8fafc 45%);
+  padding: 48px 20px;
+}
+.card {
+  width: 100%;
+  max-width: 860px;
+  border-radius: 24px;
+  background: #fff;
+  padding: 32px;
+  box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.12);
+}
+.header {
+  margin-bottom: 28px;
+  text-align: center;
+}
+.badge {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.title {
+  font-size: 28px;
+  color: #0f172a;
+}
+.subtitle {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #64748b;
+}
+.sourceActions {
+  display: grid;
+  gap: 10px;
+}
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: 16px;
+  border: 2px dashed #cbd5e1;
+  padding: 42px 24px;
+  text-align: center;
+  color: #334155;
+  background: #f8fafc;
+}
+.dropzone:hover {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+.dropzoneIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 24px;
+}
+.dropzoneTitle {
+  font-size: 16px;
+  font-weight: 650;
+}
+.dropzoneHint,
+.helpText {
+  font-size: 13px;
+  color: #64748b;
+}
+.hiddenInput {
+  display: none;
+}
+.primaryButton,
+.secondaryButton,
+.submitButton,
+.debugToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  padding: 11px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.primaryButton,
+.submitButton {
+  border: 0;
+  background: #111827;
+  color: #fff;
+}
+.secondaryButton {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.submitButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.statusPanel {
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+.statusPanel > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.statusIcon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #15803d;
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #c7d2fe;
+  border-top-color: #4338ca;
+  border-radius: 50%;
+  color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.progressTrack {
+  height: 7px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+.progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: #4f46e5;
+  transition: width 0.2s;
+}
+.steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin-top: 14px;
+  list-style: none;
+  font-size: 13px;
+}
+.stepComplete {
+  color: #15803d;
+}
+.stepPending {
+  color: #94a3b8;
+}
+.errorBlock {
+  margin-top: 16px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 14px 16px;
+}
+.editorBlock,
+.resultBlock,
+.debugBlock {
+  margin-top: 24px;
+}
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.sectionHeading h2 {
+  font-size: 17px;
+}
+.sectionHeading span {
+  font-size: 12px;
+  color: #64748b;
+}
+.helpText {
+  margin-bottom: 12px;
+}
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.debugToggle {
+  width: 100%;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #3730a3;
+}
+.debugGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.debugGrid figure {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.debugGrid figcaption {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.debugGrid img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: contain;
+  background: #fff;
+}
+.debugGrid .bestVariant {
+  border: 2px solid #22c55e;
+}
+.textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 16px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0f172a;
+  outline: none;
+}
+.textarea:focus {
+  border-color: #4f46e5;
+  background: #fff;
+}
+.fieldsBlock {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #e0e7ff;
+  border-radius: 14px;
+  background: #eef2ff;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.fieldRow,
+.fieldRowWide {
+  min-width: 0;
+}
+.fieldRowWide {
+  grid-column: 1/-1;
+}
+.fieldLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3730a3;
+}
+.fieldInput {
+  width: 100%;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+  font: inherit;
+  color: #0f172a;
+  outline: none;
+}
+.submitButton {
+  width: 100%;
+  margin-top: 24px;
+  padding: 14px 20px;
+  font-size: 15px;
+}
+.sideSelector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.sideButton,
+.sideActive {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 11px 14px;
+  background: #fff;
+  color: #475569;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sideButton span,
+.sideActive span {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+.sideActive {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #3730a3;
+}
+.sideButton:disabled,
+.sideActive:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.structuredResult {
+  margin-top: 24px;
+}
+.scanOtherSideButton {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px dashed #6366f1;
+  border-radius: 11px;
+  padding: 12px;
+  background: #eef2ff;
+  color: #3730a3;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.fieldLabelRow {
+  min-height: 22px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.confidenceGood,
+.confidenceLow {
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.confidenceGood {
+  background: #dcfce7;
+  color: #15803d;
+}
+.confidenceLow {
+  background: #fef3c7;
+  color: #a16207;
+}
+.mrzBlock {
+  margin-top: 12px;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+}
+.mrzBlock strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #93c5fd;
+}
+.mrzBlock pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}
+@media (max-width: 640px) {
+  .main {
+    padding: 18px 10px;
+  }
+  .card {
+    padding: 20px 14px;
+    border-radius: 18px;
+  }
+  .steps,
+  .debugGrid,
+  .fieldsBlock,
+  .sideSelector {
+    grid-template-columns: 1fr;
+  }
+  .fieldRowWide {
+    grid-column: auto;
+  }
+  .inlineActions > * {
+    flex: 1;
+  }
+  .title {
+    font-size: 23px;
+  }
+}
