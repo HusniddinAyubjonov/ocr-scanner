@@ -287,10 +287,6 @@ const extractLabeledField = (
       return next
     }
 
-    // OCR occasionally inserts a stray one/two-character junk line right
-    // after the label (a misread speck, not real content) — if the
-    // immediate next line is too short to be real data, try the one after
-    // that before giving up on this label entirely.
     if (next && next.length <= 2 && !isKnownLabelLine(next)) {
       const nextAfter = lines[i + 2]?.trim()
 
@@ -303,20 +299,17 @@ const extractLabeledField = (
   return ""
 }
 
-// Falls back to a lone all-caps word (Cyrillic or Latin) right after a name
-// label when the Cyrillic/Latin transliteration pair is incomplete — e.g.
-// only the Latin spelling survived OCR with no Cyrillic line before it.
 const findCapsWordAfterLabel = (lines: string[], labelPatterns: RegExp[]): string => {
-  const labelIndex = lines.findIndex((line) => labelPatterns.some((pattern) => pattern.test(line)))
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!labelPatterns.some((pattern) => pattern.test(lines[i]))) {
+      continue
+    }
 
-  if (labelIndex === -1) {
-    return ""
-  }
+    const next = lines[i + 1]?.trim()
 
-  const next = lines[labelIndex + 1]?.trim()
-
-  if (next && (CYRILLIC_CAPS_WORD.test(next) || LATIN_CAPS_WORD.test(next))) {
-    return next
+    if (next && (CYRILLIC_CAPS_WORD.test(next) || LATIN_CAPS_WORD.test(next))) {
+      return next
+    }
   }
 
   return ""
@@ -378,17 +371,31 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     address: extractAddress(lines),
   }
 
-  const namePairs = findNamePairs(lines)
-  if (namePairs[0]) fromLabels.surname = namePairs[0]
-  if (namePairs[1]) fromLabels.givenNames = namePairs[1]
-  if (namePairs[2]) fromLabels.fatherName = namePairs[2]
+  fromLabels.surname = findCapsWordAfterLabel(lines, SURNAME_LABEL)
+  fromLabels.givenNames = findCapsWordAfterLabel(lines, GIVEN_NAME_LABEL)
 
-  if (!fromLabels.surname) {
-    fromLabels.surname = findCapsWordAfterLabel(lines, SURNAME_LABEL)
-  }
-  if (!fromLabels.givenNames) {
-    fromLabels.givenNames = findCapsWordAfterLabel(lines, GIVEN_NAME_LABEL)
-  }
+  // A card photographed more than once (e.g. both slots caught the front)
+  // repeats the same surname pair later in the text — comparing with "қ"
+  // and "к" treated as the same letter keeps that repeat from being
+  // mistaken for a different name and filling a still-empty field with it.
+  const namesLookSame = (a: string, b: string): boolean =>
+    a.toLowerCase().replace(/қ/g, "к") === b.toLowerCase().replace(/қ/g, "к")
+
+  const knownNames = [fromLabels.surname, fromLabels.givenNames, fromLabels.fatherName].filter(
+    (name): name is string => Boolean(name),
+  )
+  const availablePairs = findNamePairs(lines).filter(
+    (pair) => !knownNames.some((known) => namesLookSame(known, pair)),
+  )
+
+  const missingNameFields = (["surname", "givenNames", "fatherName"] as const).filter(
+    (key) => !fromLabels[key],
+  )
+  missingNameFields.forEach((key, index) => {
+    if (availablePairs[index]) {
+      fromLabels[key] = availablePairs[index]
+    }
+  })
 
   const birthRow = findRowAfterHeader(lines, isBirthRowHeader)
   const sexToken = birthRow.map(normalizeLookalikes).find((token) => /^[MF]+$/.test(token))
