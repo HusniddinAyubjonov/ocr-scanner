@@ -4,6 +4,7 @@ import { useState } from "react"
 import type { ChangeEvent } from "react"
 import { createWorker, PSM } from "tesseract.js"
 import { Modal } from "@/ui-component/modal/modal.component"
+import { CameraCapture } from "@/ui-component/camera-capture/camera-capture.component"
 import { extractCleanText, preprocessImage } from "./home.utils"
 import {
   EMPTY_ID_CARD_FIELDS,
@@ -68,6 +69,7 @@ export const Home = () => {
     useState<IdCardFields>(EMPTY_ID_CARD_FIELDS)
   const [showRawText, setShowRawText] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [activeCameraSlot, setActiveCameraSlot] = useState<number | null>(null)
 
   const updateSlot = (index: number, patch: Partial<Slot>) => {
     setSlots((current) =>
@@ -159,6 +161,11 @@ export const Home = () => {
     updateSlot(index, { image: null, error: null, progress: 0 })
   }
 
+  const handleCameraCapture = (index: number, file: File) => {
+    setActiveCameraSlot(null)
+    void runRecognition(index, file)
+  }
+
   const handleIdFieldChange = (key: keyof IdCardFields, value: string) => {
     setIdCardFields((current) => ({ ...current, [key]: value }))
   }
@@ -230,6 +237,16 @@ export const Home = () => {
                   Откроется выбор: камера или файл/галерея
                 </p>
               </label>
+            )}
+
+            {!slot.image && (
+              <button
+                type="button"
+                onClick={() => setActiveCameraSlot(index)}
+                className={styles.cameraButton}
+              >
+                Сфотографировать с рамкой
+              </button>
             )}
 
             <input
@@ -366,6 +383,13 @@ export const Home = () => {
         description="Документ успешно отправлен."
         onClose={handleCloseModal}
       />
+
+      {activeCameraSlot !== null && (
+        <CameraCapture
+          onCapture={(file) => handleCameraCapture(activeCameraSlot, file)}
+          onClose={() => setActiveCameraSlot(null)}
+        />
+      )}
     </main>
   )
 }

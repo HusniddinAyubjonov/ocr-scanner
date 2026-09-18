@@ -100,6 +100,24 @@
   color: #94a3b8;
 }
 
+.cameraButton {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cameraButton:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
 .hiddenInput {
   display: none;
 }
