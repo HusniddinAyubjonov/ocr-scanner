@@ -113,7 +113,10 @@ const FIELD_LABELS: Record<
   // accepted throughout.
   fatherName: [/номи\s*падар/i, /father.?s?\s*name/i],
   birthPlace: [/[чц]ои\s*таваллуд/i, /place\s*of\s*birth/i],
-  authority: [/ма[кқ]оми/i, /\bauthority\b/i],
+  // "Мақоми шиносномадиханда" is the full Tajik phrase ("issuing
+  // authority") — stripping only "Мақоми" left "шиносномадиханда" behind
+  // looking exactly like a plausible short value.
+  authority: [/ма[кқ]оми(\s*шиносномадиханда)?/i, /\bauthority\b/i],
   documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?no\.?/i],
   maritalStatus: [/вазъи\s*оилав[^\s/]*/i, /marital\s*status/i],
   bloodGroup: [/гуру[хҳ]и\s*хун[^\s/]*/i, /blood\s*group/i],
@@ -290,7 +293,15 @@ const extractAddress = (lines: string[]): string => {
     if (isKnownLabelLine(lines[i])) {
       break
     }
-    collected.push(lines[i])
+
+    // OCR sometimes merges an unrelated date (e.g. the birth date) onto the
+    // same line as an address fragment — strip it so it doesn't pollute the
+    // address text; extractIdCardFields picks it up separately as birthDate.
+    const cleaned = lines[i].replace(DATE_PATTERN, "").replace(/\s{2,}/g, " ").trim()
+
+    if (cleaned) {
+      collected.push(cleaned)
+    }
   }
 
   return collected.join(", ")
@@ -394,15 +405,19 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   }
 
   // The MRZ line carrying it is sometimes too short/garbled to trust
-  // (parseMrz then skips it entirely), but the birth date is also the most
-  // prominent bare date printed on the front — a line that is nothing but a
-  // date, found before we already know one is the birth date, is a
-  // reasonable last resort.
+  // (parseMrz then skips it entirely) — fall back to the first date found
+  // anywhere in the text that isn't already claimed as the issue/expiry
+  // date (OCR sometimes merges the birth date onto an unrelated line, e.g.
+  // the address, so this can't require the whole line to be just a date).
   if (!fields.birthDate) {
-    const standaloneDate = lines.find((line) => new RegExp(`^${DATE_PATTERN.source}$`).test(line))
+    for (const line of lines) {
+      const match = line.match(DATE_PATTERN)
+      const candidate = match?.[0]
 
-    if (standaloneDate) {
-      fields.birthDate = standaloneDate
+      if (candidate && candidate !== fields.issueDate && candidate !== fields.expiryDate) {
+        fields.birthDate = candidate
+        break
+      }
     }
   }
 
