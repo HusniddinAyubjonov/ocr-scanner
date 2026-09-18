@@ -1,6 +1,36 @@
+import type { Page } from "tesseract.js"
+
 const MIN_TARGET_WIDTH = 1600
 const MAX_UPSCALE = 2.5
 const CLIP_PERCENT = 0.02
+const MIN_WORD_CONFIDENCE = 60
+
+// Tesseract still tries to read text out of photos/icons/logos on a document —
+// those regions come back as real words but with low confidence, so filtering
+// by confidence strips that garbage while keeping the actual text.
+export const extractCleanText = (page: Page): string => {
+  if (!page.blocks) {
+    return page.text
+  }
+
+  const lines: string[] = []
+
+  for (const block of page.blocks) {
+    for (const paragraph of block.paragraphs) {
+      for (const line of paragraph.lines) {
+        const words = line.words
+          .filter((word) => word.confidence >= MIN_WORD_CONFIDENCE)
+          .map((word) => word.text)
+
+        if (words.length > 0) {
+          lines.push(words.join(" "))
+        }
+      }
+    }
+  }
+
+  return lines.join("\n")
+}
 
 export const preprocessImage = async (file: File): Promise<string> => {
   const bitmap = await createImageBitmap(file)

@@ -4,7 +4,7 @@ import { useState } from "react"
 import type { ChangeEvent } from "react"
 import { createWorker, PSM } from "tesseract.js"
 import { Modal } from "@/ui-component/modal/modal.component"
-import { preprocessImage } from "./home.utils"
+import { extractCleanText, preprocessImage } from "./home.utils"
 import styles from "./home.module.css"
 
 const OCR_LANGUAGES = "eng+rus+tgk"
@@ -41,11 +41,11 @@ export const Home = () => {
 
       await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO })
 
-      const result = await worker.recognize(processedImageUrl)
+      const result = await worker.recognize(processedImageUrl, {}, { blocks: true })
 
       URL.revokeObjectURL(processedImageUrl)
 
-      setRecognizedText(result.data.text)
+      setRecognizedText(extractCleanText(result.data))
     } catch (error) {
       console.error("OCR error:", error)
       setErrorMessage(
