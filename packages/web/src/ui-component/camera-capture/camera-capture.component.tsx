@@ -9,7 +9,9 @@ type CameraCaptureProps = {
 }
 
 export const CameraCapture = ({ onCapture, onClose }: CameraCaptureProps) => {
+  const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,21 +54,45 @@ export const CameraCapture = ({ onCapture, onClose }: CameraCaptureProps) => {
 
   const handleShutter = () => {
     const video = videoRef.current
+    const container = containerRef.current
+    const frame = frameRef.current
 
-    if (!video || video.videoWidth === 0) {
+    if (!video || !container || !frame || video.videoWidth === 0) {
       return
     }
 
+    // The video fills the container with object-fit: cover, which scales it
+    // up until both dimensions cover the container and crops the overflow
+    // equally from each side — map the on-screen guide frame back to native
+    // video pixels through that same scale/offset so the capture matches
+    // exactly what the user aligned inside the frame, not the whole camera view.
+    const containerRect = container.getBoundingClientRect()
+    const frameRect = frame.getBoundingClientRect()
+
+    const coverScale = Math.max(
+      containerRect.width / video.videoWidth,
+      containerRect.height / video.videoHeight,
+    )
+    const renderedVideoWidth = video.videoWidth * coverScale
+    const renderedVideoHeight = video.videoHeight * coverScale
+    const offsetX = (renderedVideoWidth - containerRect.width) / 2
+    const offsetY = (renderedVideoHeight - containerRect.height) / 2
+
+    const sx = (frameRect.left - containerRect.left + offsetX) / coverScale
+    const sy = (frameRect.top - containerRect.top + offsetY) / coverScale
+    const sWidth = frameRect.width / coverScale
+    const sHeight = frameRect.height / coverScale
+
     const canvas = document.createElement("canvas")
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    canvas.width = Math.round(sWidth)
+    canvas.height = Math.round(sHeight)
 
     const ctx = canvas.getContext("2d")
     if (!ctx) {
       return
     }
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height)
 
     canvas.toBlob((blob) => {
       if (blob) {
@@ -89,13 +115,13 @@ export const CameraCapture = ({ onCapture, onClose }: CameraCaptureProps) => {
   }
 
   return (
-    <div className={styles.overlay}>
+    <div ref={containerRef} className={styles.overlay}>
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video ref={videoRef} className={styles.video} muted playsInline />
 
       <p className={styles.hint}>Совместите документ с рамкой, свет — ровный, без бликов</p>
 
-      <div className={styles.frame} />
+      <div ref={frameRef} className={styles.frame} />
 
       <div className={styles.controls}>
         <button type="button" onClick={onClose} className={styles.closeButton} aria-label="Закрыть камеру">

@@ -3,7 +3,10 @@ import type { Page } from "tesseract.js"
 const MIN_TARGET_WIDTH = 1600
 const MAX_UPSCALE = 2.5
 const CLIP_PERCENT = 0.02
-const MIN_WORD_CONFIDENCE = 60
+// Small print on a security-patterned document (ID cards, passports) scores
+// lower even when Tesseract reads it correctly — 60 was cutting out real
+// text, not just the garbage from photos/icons it was meant to catch.
+const MIN_WORD_CONFIDENCE = 35
 
 export const extractCleanText = (page: Page): string => {
   if (!page.blocks) {
