@@ -1,320 +1,46 @@
-.main {
-  min-height: 100vh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 45%);
-  padding: 48px 20px;
-}
-
-.card {
-  width: 100%;
-  max-width: 640px;
-  border-radius: 24px;
-  background: #ffffff;
-  padding: 32px;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 20px 40px -12px rgba(15, 23, 42, 0.12);
-}
-
-.header {
-  margin-bottom: 28px;
-  text-align: center;
-}
-
-.badge {
-  display: inline-block;
-  margin-bottom: 12px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #111827;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.subtitle {
-  margin-top: 6px;
-  font-size: 14px;
-  color: #64748b;
-}
-
-.slot {
-  margin-bottom: 20px;
-}
-
-.slot:last-of-type {
-  margin-bottom: 0;
-}
-
-.slotLabel {
-  margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  border-radius: 16px;
-  border: 2px dashed #cbd5e1;
-  padding: 32px 24px;
-  text-align: center;
-  color: #334155;
-  background: #f8fafc;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.dropzone:hover {
-  border-color: #94a3b8;
-  background: #f1f5f9;
-}
-
-.dropzoneIcon {
-  width: 32px;
-  height: 32px;
-  color: #64748b;
-}
-
-.dropzoneTitle {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.dropzoneHint {
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.cameraButton {
-  width: 100%;
-  margin-top: 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #334155;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.cameraButton:hover {
-  border-color: #94a3b8;
-  background: #f8fafc;
-}
-
-.hiddenInput {
-  display: none;
-}
-
-.previewBlock {
-  position: relative;
-  margin-bottom: 20px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-
-.previewImage {
-  display: block;
-  max-height: 220px;
-  width: 100%;
-  object-fit: contain;
-}
-
-.removeButton {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.65);
-  color: #ffffff;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  backdrop-filter: blur(2px);
-}
-
-.removeButton:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.85);
-}
-
-.removeButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.progressBlock {
-  margin: 20px 0;
-}
-
-.progressLabel {
-  margin-bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
-}
-
-.progressTrack {
-  height: 8px;
-  width: 100%;
-  border-radius: 999px;
-  background: #e2e8f0;
-  overflow: hidden;
-}
-
-.progressFill {
-  height: 100%;
-  border-radius: 999px;
-  background: #111827;
-  transition: width 0.2s ease;
-}
-
-.errorBlock {
-  margin-bottom: 20px;
-  border-radius: 12px;
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
-  padding: 14px 16px;
-  font-size: 14px;
-  text-align: center;
-}
-
-.fieldsBlock {
-  margin: 24px 0;
-  padding: 16px;
-  border-radius: 14px;
-  background: #eef2ff;
-  border: 1px solid #e0e7ff;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.fieldRow {
-  min-width: 0;
-}
-
-.fieldRowWide {
-  min-width: 0;
-  grid-column: 1 / -1;
-}
-
-.fieldLabel {
-  margin-bottom: 6px;
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: #3730a3;
-}
-
-.fieldInput {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid #c7d2fe;
-  background: #ffffff;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: 14px;
-  color: #0f172a;
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.fieldInput:focus {
-  border-color: #4338ca;
-}
-
-.toggleRawButton {
-  margin-top: 4px;
-  border: none;
-  background: transparent;
-  color: #4338ca;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.textareaBlock {
-  margin: 24px 0;
-}
-
-.textareaLabel {
-  margin-bottom: 8px;
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.textarea {
-  width: 100%;
-  resize: none;
-  border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  padding: 16px;
-  font: inherit;
-  font-size: 14px;
-  color: #0f172a;
-  outline: none;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.textarea:focus {
-  border-color: #111827;
-  background: #ffffff;
-}
-
-.submitButton {
-  width: 100%;
-  border: none;
-  border-radius: 14px;
-  background: #111827;
-  color: #ffffff;
-  padding: 14px 20px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    opacity 0.15s ease,
-    transform 0.05s ease;
-}
-
-.submitButton:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.submitButton:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.submitButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
+.main { min-height: 100vh; display: flex; justify-content: center; background: linear-gradient(180deg,#eef2ff,#f8fafc 45%); padding: 48px 20px; }
+.card { width: 100%; max-width: 860px; border-radius: 24px; background: #fff; padding: 32px; box-shadow: 0 20px 40px -12px rgba(15,23,42,.12); }
+.header { margin-bottom: 28px; text-align: center; }
+.badge { display: inline-block; margin-bottom: 12px; padding: 5px 12px; border-radius: 999px; background: #111827; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.title { font-size: 28px; color: #0f172a; }
+.subtitle { margin-top: 6px; font-size: 14px; color: #64748b; }
+.sourceActions { display: grid; gap: 10px; }
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; border-radius: 16px; border: 2px dashed #cbd5e1; padding: 42px 24px; text-align: center; color: #334155; background: #f8fafc; }
+.dropzone:hover { border-color: #6366f1; background: #eef2ff; }
+.dropzoneIcon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #e0e7ff; color: #4338ca; font-size: 24px; }
+.dropzoneTitle { font-size: 16px; font-weight: 650; }
+.dropzoneHint,.helpText { font-size: 13px; color: #64748b; }
+.hiddenInput { display: none; }
+.primaryButton,.secondaryButton,.submitButton,.debugToggle { display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; padding: 11px 16px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.primaryButton,.submitButton { border: 0; background: #111827; color: #fff; }
+.secondaryButton { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
+.primaryButton:disabled,.secondaryButton:disabled,.submitButton:disabled { opacity: .45; cursor: not-allowed; }
+.statusPanel { padding: 18px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; }
+.statusPanel > div:first-child { display: flex; align-items: center; gap: 10px; }
+.statusIcon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #dcfce7; color: #15803d; }
+.spinner { width: 22px; height: 22px; border: 3px solid #c7d2fe; border-top-color: #4338ca; border-radius: 50%; color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.progressTrack { height: 7px; margin-top: 14px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.progressFill { height: 100%; border-radius: inherit; background: #4f46e5; transition: width .2s; }
+.steps { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 16px; margin-top: 14px; list-style: none; font-size: 13px; }
+.stepComplete { color: #15803d; }.stepPending { color: #94a3b8; }
+.errorBlock { margin-top: 16px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; color: #b91c1c; padding: 14px 16px; }
+.editorBlock,.resultBlock,.debugBlock { margin-top: 24px; }
+.sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.sectionHeading h2 { font-size: 17px; }.sectionHeading span { font-size: 12px; color: #64748b; }
+.helpText { margin-bottom: 12px; }
+.inlineActions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.debugToggle { width: 100%; border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; }
+.debugGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 12px; }
+.debugGrid figure { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.debugGrid figcaption { padding: 8px 10px; font-size: 12px; font-weight: 600; color: #475569; }
+.debugGrid img { display: block; width: 100%; height: 180px; object-fit: contain; background: #fff; }
+.debugGrid .bestVariant { border: 2px solid #22c55e; }
+.textarea { width: 100%; resize: vertical; border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; padding: 16px; font: inherit; font-size: 14px; line-height: 1.5; color: #0f172a; outline: none; }
+.textarea:focus { border-color: #4f46e5; background: #fff; }
+.fieldsBlock { margin: 24px 0; padding: 16px; border: 1px solid #e0e7ff; border-radius: 14px; background: #eef2ff; display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+.fieldRow,.fieldRowWide { min-width: 0; }.fieldRowWide { grid-column: 1/-1; }
+.fieldLabel { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #3730a3; }
+.fieldInput { width: 100%; border: 1px solid #c7d2fe; border-radius: 10px; background: #fff; padding: 10px 12px; font: inherit; color: #0f172a; outline: none; }
+.submitButton { width: 100%; margin-top: 24px; padding: 14px 20px; font-size: 15px; }
+@media (max-width: 640px) { .main { padding: 18px 10px; }.card { padding: 20px 14px; border-radius: 18px; }.steps,.debugGrid,.fieldsBlock { grid-template-columns: 1fr; }.fieldRowWide { grid-column: auto; }.inlineActions > * { flex: 1; }.title { font-size: 23px; } }

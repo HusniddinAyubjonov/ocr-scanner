@@ -116,7 +116,6 @@ export const CameraCapture = ({ onCapture, onClose }: CameraCaptureProps) => {
 
   return (
     <div ref={containerRef} className={styles.overlay}>
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video ref={videoRef} className={styles.video} muted playsInline />
 
       <p className={styles.hint}>Совместите документ с рамкой, свет — ровный, без бликов</p>

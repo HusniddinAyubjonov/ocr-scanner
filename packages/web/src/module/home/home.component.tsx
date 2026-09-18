@@ -1,394 +1,163 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ChangeEvent } from "react"
-import { createWorker, PSM } from "tesseract.js"
-import { Modal } from "@/ui-component/modal/modal.component"
+import { createWorker, OEM, PSM } from "tesseract.js"
 import { CameraCapture } from "@/ui-component/camera-capture/camera-capture.component"
-import { extractCleanText, preprocessImage } from "./home.utils"
-import {
-  EMPTY_ID_CARD_FIELDS,
-  extractIdCardFields,
-  isIdCardText,
-} from "./id-card.utils"
+import { Modal } from "@/ui-component/modal/modal.component"
+import { DocumentCornerEditor } from "./document-corner-editor"
+import { correctPerspective, createPreprocessingVariants, cropDocument, deskewImage, detectDocument, loadSourceImage, revokeProcessingImage } from "./image-processing"
+import { extractCleanText } from "./home.utils"
+import { EMPTY_ID_CARD_FIELDS, extractIdCardFields, isIdCardText } from "./id-card.utils"
 import type { IdCardFields } from "./id-card.utils"
+import { INITIAL_SCANNER_STATE } from "./scanner.types"
+import type { OcrResult, ProcessingImage, ScannerState } from "./scanner.types"
 import styles from "./home.module.css"
 
-const OCR_LANGUAGES = "eng+rus+tgk"
+const OCR_LANGUAGES = ["eng", "rus", "tgk"]
+const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
+  { key: "surname", label: "Фамилия" }, { key: "givenNames", label: "Имя" }, { key: "fatherName", label: "Имя отца" },
+  { key: "sex", label: "Пол" }, { key: "birthDate", label: "Дата рождения" }, { key: "birthPlace", label: "Место рождения" },
+  { key: "address", label: "Адрес" }, { key: "personalIdNumber", label: "ID номер" }, { key: "authority", label: "Орган выдачи" },
+  { key: "documentNumber", label: "Номер документа" }, { key: "nationalIdNumber", label: "Единый национальный ID" },
+  { key: "issueDate", label: "Дата выдачи" }, { key: "expiryDate", label: "Срок действия" },
+  { key: "maritalStatus", label: "Семейное положение" }, { key: "bloodGroup", label: "Группа крови" },
+]
 
-type Slot = {
-  label: string
-  image: string | null
-  isRecognizing: boolean
-  progress: number
-  error: string | null
+const releaseImages = (state: ScannerState): void => {
+  revokeProcessingImage(state.originalImage); revokeProcessingImage(state.detectedImage); revokeProcessingImage(state.croppedImage); revokeProcessingImage(state.correctedImage)
+  state.preprocessedVariants.forEach((variant) => revokeProcessingImage(variant.image))
+}
+const errorMessage = (cause: unknown, fallback: string): string => {
+  if (!(cause instanceof Error)) return fallback
+  return /network|fetch|traineddata|language/i.test(cause.message)
+    ? "Не удалось загрузить языковые модели OCR. Проверьте интернет-соединение."
+    : cause.message || fallback
 }
 
-const INITIAL_SLOTS: Slot[] = [
-  {
-    label: "Фото 1 (лицевая сторона)",
-    image: null,
-    isRecognizing: false,
-    progress: 0,
-    error: null,
-  },
-  {
-    label: "Фото 2 (оборотная сторона)",
-    image: null,
-    isRecognizing: false,
-    progress: 0,
-    error: null,
-  },
-]
-
-const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
-  { key: "surname", label: "Фамилия" },
-  { key: "givenNames", label: "Имя" },
-  { key: "fatherName", label: "Имя отца" },
-  { key: "sex", label: "Пол" },
-  { key: "birthDate", label: "Дата рождения" },
-  { key: "birthPlace", label: "Место рождения" },
-  { key: "address", label: "Адрес" },
-  { key: "personalIdNumber", label: "ID номер" },
-  { key: "authority", label: "Орган выдачи" },
-  { key: "documentNumber", label: "Номер документа" },
-  { key: "nationalIdNumber", label: "Единый национальный ID" },
-  { key: "issueDate", label: "Дата выдачи" },
-  { key: "expiryDate", label: "Срок действия" },
-  { key: "maritalStatus", label: "Семейное положение" },
-  { key: "bloodGroup", label: "Группа крови" },
-]
-
 export const Home = () => {
-  const [slots, setSlots] = useState<Slot[]>(INITIAL_SLOTS)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [rawTexts, setRawTexts] = useState<string[]>(["", ""])
+  const [scannerState, setScannerState] = useState<ScannerState>(INITIAL_SCANNER_STATE)
+  const scannerStateRef = useRef(scannerState)
+  const operationIdRef = useRef(0)
   const [recognizedText, setRecognizedText] = useState("")
-  const [isIdCard, setIsIdCard] = useState(false)
-  const [idCardFields, setIdCardFields] =
-    useState<IdCardFields>(EMPTY_ID_CARD_FIELDS)
-  const [showRawText, setShowRawText] = useState(false)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeCameraSlot, setActiveCameraSlot] = useState<number | null>(null)
+  const [idCardFields, setIdCardFields] = useState<IdCardFields>(EMPTY_ID_CARD_FIELDS)
+  const [showIdFields, setShowIdFields] = useState(false)
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
+  const [isSuccessOpen, setIsSuccessOpen] = useState(false)
+  const [isDebugOpen, setIsDebugOpen] = useState(false)
+  const [copyLabel, setCopyLabel] = useState("Копировать")
 
-  const updateSlot = (index: number, patch: Partial<Slot>) => {
-    setSlots((current) =>
-      current.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)),
-    )
+  useEffect(() => { scannerStateRef.current = scannerState }, [scannerState])
+  useEffect(() => () => releaseImages(scannerStateRef.current), [])
+  const replaceState = (nextState: ScannerState) => {
+    const previousState = scannerStateRef.current
+    scannerStateRef.current = nextState; setScannerState(nextState); releaseImages(previousState)
+  }
+  const clearScanner = () => {
+    operationIdRef.current += 1; replaceState(INITIAL_SCANNER_STATE); setRecognizedText("")
+    setIdCardFields(EMPTY_ID_CARD_FIELDS); setShowIdFields(false); setIsDebugOpen(false)
   }
 
-  const runRecognition = async (index: number, selectedFile: File) => {
-    const imageUrl = URL.createObjectURL(selectedFile)
-
-    updateSlot(index, {
-      image: imageUrl,
-      isRecognizing: true,
-      progress: 0,
-      error: null,
-    })
-
-    let worker: Awaited<ReturnType<typeof createWorker>> | null = null
-
+  const selectImage = async (file: File) => {
+    const operationId = operationIdRef.current + 1; operationIdRef.current = operationId
+    releaseImages(scannerStateRef.current); setRecognizedText(""); setShowIdFields(false); setIdCardFields(EMPTY_ID_CARD_FIELDS)
+    setScannerState({ ...INITIAL_SCANNER_STATE, sourceFile: file, status: { stage: "loading", message: "Загрузка изображения", progress: null } })
     try {
-      const processedImageUrl = await preprocessImage(selectedFile)
-
-      worker = await createWorker(OCR_LANGUAGES, 1, {
-        logger: (message) => {
-          if (message.status === "recognizing text") {
-            updateSlot(index, { progress: Math.round(message.progress * 100) })
-          }
-        },
-      })
-
-      await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO })
-
-      const result = await worker.recognize(
-        processedImageUrl,
-        {},
-        { blocks: true },
-      )
-
-      URL.revokeObjectURL(processedImageUrl)
-
-      const newText = extractCleanText(result.data)
-
-      setRecognizedText((current) =>
-        current.trim() ? `${current}\n${newText}` : newText,
-      )
-
-      setRawTexts((current) => {
-        const next = current.map((text, i) => (i === index ? newText : text))
-        const combined = next.filter(Boolean).join("\n")
-
-        setIsIdCard(isIdCardText(combined))
-        setIdCardFields(extractIdCardFields(combined))
-
-        return next
-      })
-    } catch (error) {
-      console.error("OCR error:", error)
-      updateSlot(index, {
-        error:
-          error instanceof Error
-            ? `Не удалось распознать текст: ${error.message}`
-            : "Не удалось распознать текст. Проверьте подключение к интернету и попробуйте снова.",
-      })
-    } finally {
-      if (worker) {
-        await worker.terminate()
-      }
-      updateSlot(index, { isRecognizing: false })
+      const originalImage = await loadSourceImage(file)
+      if (operationId !== operationIdRef.current) { revokeProcessingImage(originalImage); return }
+      setScannerState((current) => ({ ...current, originalImage, status: { stage: "detecting", message: "Поиск границ документа", progress: null } }))
+      const detection = await detectDocument(originalImage)
+      if (operationId !== operationIdRef.current) { revokeProcessingImage(detection.preview); return }
+      setScannerState((current) => ({ ...current, detectedImage: detection.preview, documentCorners: detection.corners, detectionConfidence: detection.confidence,
+        status: { stage: "reviewing", message: detection.confidence >= .55 ? "Границы найдены — проверьте углы" : "Низкая уверенность — скорректируйте углы", progress: null } }))
+    } catch (cause) {
+      if (operationId === operationIdRef.current) setScannerState((current) => ({ ...current, error: errorMessage(cause, "Не удалось открыть изображение."), status: { stage: "error", message: "Ошибка загрузки", progress: null } }))
     }
   }
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; event.target.value = ""; if (file) void selectImage(file)
+  }
 
-  const handleImageChange = (
-    index: number,
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const selectedFile = event.target.files?.[0]
-
-    event.target.value = ""
-
-    if (!selectedFile) {
-      return
+  const runPipeline = async () => {
+    const { originalImage, documentCorners } = scannerStateRef.current
+    if (!originalImage || !documentCorners) return
+    const operationId = operationIdRef.current + 1; operationIdRef.current = operationId
+    revokeProcessingImage(scannerStateRef.current.correctedImage)
+    revokeProcessingImage(scannerStateRef.current.croppedImage)
+    scannerStateRef.current.preprocessedVariants.forEach((variant) => revokeProcessingImage(variant.image))
+    setScannerState((current) => ({ ...current, croppedImage: null, correctedImage: null, preprocessedVariants: [], ocrResult: null }))
+    try {
+      setScannerState((current) => ({ ...current, error: null, status: { stage: "correcting", message: "Исправление перспективы", progress: null } }))
+      const croppedImage = await cropDocument(originalImage, documentCorners)
+      setScannerState((current) => ({ ...current, croppedImage }))
+      let correctedImage: ProcessingImage = await correctPerspective(originalImage, documentCorners)
+      if (operationId !== operationIdRef.current) { revokeProcessingImage(correctedImage); return }
+      setScannerState((current) => ({ ...current, correctedImage, status: { stage: "deskewing", message: "Выравнивание строк", progress: null } }))
+      const deskewedImage = await deskewImage(correctedImage); revokeProcessingImage(correctedImage); correctedImage = deskewedImage
+      setScannerState((current) => ({ ...current, correctedImage, status: { stage: "preprocessing", message: "Создание вариантов изображения", progress: null } }))
+      const variants = await createPreprocessingVariants(correctedImage)
+      if (operationId !== operationIdRef.current) { variants.forEach((variant) => revokeProcessingImage(variant.image)); return }
+      setScannerState((current) => ({ ...current, preprocessedVariants: variants, status: { stage: "recognizing", message: "Подготовка OCR", progress: 0 } }))
+      const worker = await createWorker(OCR_LANGUAGES, OEM.LSTM_ONLY, { logger: (message) => {
+        if (operationId === operationIdRef.current && message.status === "recognizing text") setScannerState((current) => ({ ...current, status: { stage: "recognizing", message: current.status.message, progress: Math.round(message.progress * 100) } }))
+      } })
+      try {
+        await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO, preserve_interword_spaces: "1" })
+        const results: OcrResult[] = []
+        for (const variant of variants) {
+          if (operationId !== operationIdRef.current) break
+          setScannerState((current) => ({ ...current, status: { stage: "recognizing", message: `OCR: ${variant.label}`, progress: 0 } }))
+          const recognition = await worker.recognize(variant.image.blob, {}, { blocks: true })
+          results.push({ text: extractCleanText(recognition.data), confidence: recognition.data.confidence, variantId: variant.id })
+        }
+        if (operationId !== operationIdRef.current || results.length === 0) return
+        const bestResult = results.reduce((best, result) => result.confidence > best.confidence ? result : best)
+        setScannerState((current) => ({ ...current, ocrResult: bestResult, status: { stage: "cleaning", message: "Очистка текста", progress: null } }))
+        setRecognizedText(bestResult.text)
+        const isIdCard = isIdCardText(bestResult.text); setShowIdFields(isIdCard)
+        setIdCardFields(isIdCard ? extractIdCardFields(bestResult.text) : EMPTY_ID_CARD_FIELDS)
+        setScannerState((current) => ({ ...current, status: { stage: "ready", message: "Готово", progress: 100 } }))
+      } finally { await worker.terminate() }
+    } catch (cause) {
+      if (operationId === operationIdRef.current) setScannerState((current) => ({ ...current, error: errorMessage(cause, "Обработка или OCR завершились ошибкой."), status: { stage: "error", message: "Обработка не завершена", progress: null } }))
     }
-
-    void runRecognition(index, selectedFile)
   }
-
-  const handleRemoveImage = (index: number) => {
-    updateSlot(index, { image: null, error: null, progress: 0 })
+  const handleCopy = async () => {
+    if (!recognizedText) return
+    try { await navigator.clipboard.writeText(recognizedText); setCopyLabel("Скопировано") } catch { setCopyLabel("Ошибка копирования") }
+    window.setTimeout(() => setCopyLabel("Копировать"), 1600)
   }
+  const handleSubmit = () => { if (recognizedText.trim()) { clearScanner(); setIsSuccessOpen(true) } }
+  const busyStages = ["loading", "detecting", "correcting", "deskewing", "preprocessing", "recognizing", "cleaning"]
+  const isBusy = busyStages.includes(scannerState.status.stage)
+  const statusSteps = [
+    ["Изображение загружено", Boolean(scannerState.originalImage)], ["Документ найден", Boolean(scannerState.documentCorners)],
+    ["Перспектива и наклон исправлены", Boolean(scannerState.correctedImage)], ["Изображение обработано", scannerState.preprocessedVariants.length > 0],
+    ["Текст распознан и очищен", scannerState.status.stage === "ready"],
+  ] as const
 
-  const handleCameraCapture = (index: number, file: File) => {
-    setActiveCameraSlot(null)
-    void runRecognition(index, file)
-  }
-
-  const handleIdFieldChange = (key: keyof IdCardFields, value: string) => {
-    setIdCardFields((current) => ({ ...current, [key]: value }))
-  }
-
-  const isSubmittable = isIdCard
-    ? Object.values(idCardFields).some((value) => value.trim())
-    : Boolean(recognizedText.trim())
-
-  const handleSubmit = () => {
-    if (!isSubmittable) {
-      return
-    }
-
-    setSlots(INITIAL_SLOTS)
-    setRawTexts(["", ""])
-    setRecognizedText("")
-    setIsIdCard(false)
-    setIdCardFields(EMPTY_ID_CARD_FIELDS)
-    setShowRawText(false)
-    setIsModalOpen(true)
-  }
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false)
-  }
-
-  const isRecognizing = slots.some((slot) => slot.isRecognizing)
-
-  return (
-    <main className={styles.main}>
-      <div className={styles.card}>
-        <div className={styles.header}>
-          <span className={styles.badge}>OCR</span>
-          <h1 className={styles.title}>Распознавание документов</h1>
-          <p className={styles.subtitle}>Русский · English · Тоҷикӣ · 0–9</p>
-        </div>
-
-        {slots.map((slot, index) => (
-          <div key={slot.label} className={styles.slot}>
-            <p className={styles.slotLabel}>{slot.label}</p>
-
-            {!slot.image && (
-              <label htmlFor={`document-${index}`} className={styles.dropzone}>
-                <svg
-                  className={styles.dropzoneIcon}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M12 16V4M12 4L7 9M12 4L17 9"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <p className={styles.dropzoneTitle}>
-                  Выбрать или сфотографировать документ
-                </p>
-                <p className={styles.dropzoneHint}>
-                  Откроется выбор: камера или файл/галерея
-                </p>
-              </label>
-            )}
-
-            {!slot.image && (
-              <button
-                type="button"
-                onClick={() => setActiveCameraSlot(index)}
-                className={styles.cameraButton}
-              >
-                Сфотографировать с рамкой
-              </button>
-            )}
-
-            <input
-              id={`document-${index}`}
-              type="file"
-              accept="image/*"
-              onChange={(event) => handleImageChange(index, event)}
-              className={styles.hiddenInput}
-            />
-
-            {slot.image && (
-              <div className={styles.previewBlock}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={slot.image}
-                  alt="Document preview"
-                  className={styles.previewImage}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(index)}
-                  disabled={slot.isRecognizing}
-                  className={styles.removeButton}
-                  aria-label="Удалить документ"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {slot.isRecognizing && (
-              <div className={styles.progressBlock}>
-                <div className={styles.progressLabel}>
-                  <span>Распознаём текст</span>
-                  <span>{slot.progress}%</span>
-                </div>
-                <div className={styles.progressTrack}>
-                  <div
-                    className={styles.progressFill}
-                    style={{ width: `${slot.progress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {slot.error && (
-              <div className={styles.errorBlock}>{slot.error}</div>
-            )}
-          </div>
-        ))}
-
-        {isIdCard ? (
-          <>
-            <div className={styles.fieldsBlock}>
-              {ID_CARD_FIELD_LABELS.map(({ key, label }) => (
-                <div
-                  key={key}
-                  className={
-                    key === "address" ? styles.fieldRowWide : styles.fieldRow
-                  }
-                >
-                  <label
-                    htmlFor={`id-field-${key}`}
-                    className={styles.fieldLabel}
-                  >
-                    {label}
-                  </label>
-                  <input
-                    id={`id-field-${key}`}
-                    type="text"
-                    value={idCardFields[key]}
-                    onChange={(event) =>
-                      handleIdFieldChange(key, event.target.value)
-                    }
-                    placeholder="Не найдено"
-                    className={styles.fieldInput}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowRawText((current) => !current)}
-              className={styles.toggleRawButton}
-            >
-              {showRawText
-                ? "Скрыть весь распознанный текст"
-                : "Показать весь распознанный текст"}
-            </button>
-
-            {showRawText && (
-              <div className={styles.textareaBlock}>
-                <textarea
-                  value={recognizedText}
-                  onChange={(event) => setRecognizedText(event.target.value)}
-                  rows={8}
-                  className={styles.textarea}
-                />
-              </div>
-            )}
-          </>
-        ) : (
-          <div className={styles.textareaBlock}>
-            <label htmlFor="recognizedText" className={styles.textareaLabel}>
-              Распознанный текст
-            </label>
-
-            <textarea
-              id="recognizedText"
-              value={recognizedText}
-              onChange={(event) => setRecognizedText(event.target.value)}
-              placeholder="Здесь появится распознанный текст..."
-              rows={8}
-              className={styles.textarea}
-            />
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!isSubmittable || isRecognizing}
-          className={styles.submitButton}
-        >
-          Отправить
-        </button>
-      </div>
-
-      <Modal
-        isOpen={isModalOpen}
-        title="Успешно отправлено"
-        description="Документ успешно отправлен."
-        onClose={handleCloseModal}
-      />
-
-      {activeCameraSlot !== null && (
-        <CameraCapture
-          onCapture={(file) => handleCameraCapture(activeCameraSlot, file)}
-          onClose={() => setActiveCameraSlot(null)}
-        />
-      )}
-    </main>
-  )
+  return <main className={styles.main}><section className={styles.card}>
+    <header className={styles.header}><span className={styles.badge}>DOCUMENT SCANNER + OCR</span><h1 className={styles.title}>Сканирование документов</h1><p className={styles.subtitle}>Русский · English · Тоҷикӣ</p></header>
+    {!scannerState.originalImage ? <div className={styles.sourceActions}>
+      <label htmlFor="document-file" className={styles.dropzone}><span className={styles.dropzoneIcon}>↑</span><span className={styles.dropzoneTitle}>Выбрать фотографию документа</span><span className={styles.dropzoneHint}>JPG, PNG или WebP · до 20 МБ</span></label>
+      <input id="document-file" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileChange} className={styles.hiddenInput} />
+      <label htmlFor="mobile-camera" className={styles.secondaryButton}>Открыть камеру телефона</label><input id="mobile-camera" type="file" accept="image/*" capture="environment" onChange={handleFileChange} className={styles.hiddenInput} />
+      <button type="button" className={styles.secondaryButton} onClick={() => setIsCameraOpen(true)}>Камера с направляющей рамкой</button>
+    </div> : <>
+      <div className={styles.statusPanel}><div><span className={isBusy ? styles.spinner : styles.statusIcon}>{scannerState.status.stage === "error" ? "!" : "✓"}</span><strong>{scannerState.status.message}</strong></div>
+        {scannerState.status.progress !== null && scannerState.status.stage === "recognizing" && <div className={styles.progressTrack}><div className={styles.progressFill} style={{ width: `${scannerState.status.progress}%` }} /></div>}
+        <ul className={styles.steps}>{statusSteps.map(([label, complete]) => <li key={label} className={complete ? styles.stepComplete : styles.stepPending}>{complete ? "✓" : "○"} {label}</li>)}</ul></div>
+      {scannerState.error && <div className={styles.errorBlock}>{scannerState.error}</div>}
+      {scannerState.documentCorners && <div className={styles.editorBlock}><div className={styles.sectionHeading}><h2>Границы документа</h2><span>{Math.round(scannerState.detectionConfidence * 100)}% уверенности</span></div><p className={styles.helpText}>Перетащите четыре точки точно на углы листа.</p>
+        <DocumentCornerEditor imageUrl={scannerState.originalImage.url} imageWidth={scannerState.originalImage.width} imageHeight={scannerState.originalImage.height} corners={scannerState.documentCorners} disabled={isBusy} onChange={(documentCorners) => setScannerState((current) => ({ ...current, documentCorners }))} />
+        <div className={styles.inlineActions}><button type="button" className={styles.primaryButton} disabled={isBusy} onClick={() => void runPipeline()}>{scannerState.status.stage === "ready" ? "Обработать заново" : "Исправить и распознать"}</button><button type="button" className={styles.secondaryButton} disabled={isBusy} onClick={clearScanner}>Другое изображение</button></div></div>}
+    </>}
+    {scannerState.preprocessedVariants.length > 0 && <div className={styles.debugBlock}><button type="button" className={styles.debugToggle} onClick={() => setIsDebugOpen((current) => !current)}>{isDebugOpen ? "Скрыть этапы обработки" : "Показать этапы обработки"}</button>{isDebugOpen && <div className={styles.debugGrid}>
+      {[{ label: "Original", image: scannerState.originalImage }, { label: "Detected document", image: scannerState.detectedImage }, { label: "Cropped document", image: scannerState.croppedImage }, { label: "Perspective + deskew", image: scannerState.correctedImage }].map(({ label, image }) => image && <figure key={label}><figcaption>{label}</figcaption><img src={image.url} alt={label} /></figure>)}
+      {scannerState.preprocessedVariants.map((variant) => <figure key={variant.id} className={scannerState.ocrResult?.variantId === variant.id ? styles.bestVariant : undefined}><figcaption>{variant.label}{scannerState.ocrResult?.variantId === variant.id ? " · выбран OCR" : ""}</figcaption><img src={variant.image.url} alt={variant.label} /></figure>)}</div>}</div>}
+    {(recognizedText || scannerState.status.stage === "ready") && <section className={styles.resultBlock}><div className={styles.sectionHeading}><h2>Распознанный текст</h2>{scannerState.ocrResult && <span>Confidence {Math.round(scannerState.ocrResult.confidence)}%</span>}</div><textarea value={recognizedText} onChange={(event) => setRecognizedText(event.target.value)} rows={12} className={styles.textarea} aria-label="Распознанный текст" /><div className={styles.inlineActions}><button type="button" className={styles.secondaryButton} onClick={() => void handleCopy()}>{copyLabel}</button><button type="button" className={styles.secondaryButton} onClick={() => setRecognizedText("")}>Очистить текст</button></div></section>}
+    {showIdFields && <section className={styles.fieldsBlock}>{ID_CARD_FIELD_LABELS.map(({ key, label }) => <label key={key} className={key === "address" ? styles.fieldRowWide : styles.fieldRow}><span className={styles.fieldLabel}>{label}</span><input value={idCardFields[key]} onChange={(event) => setIdCardFields((current) => ({ ...current, [key]: event.target.value }))} className={styles.fieldInput} /></label>)}</section>}
+    {recognizedText.trim() && <button type="button" onClick={handleSubmit} disabled={isBusy} className={styles.submitButton}>Отправить</button>}
+  </section><Modal isOpen={isSuccessOpen} title="Успешно отправлено" description="Документ успешно обработан." onClose={() => setIsSuccessOpen(false)} />{isCameraOpen && <CameraCapture onCapture={(file) => { setIsCameraOpen(false); void selectImage(file) }} onClose={() => setIsCameraOpen(false)} />}</main>
 }
