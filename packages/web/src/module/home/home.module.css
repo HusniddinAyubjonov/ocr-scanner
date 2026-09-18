@@ -199,6 +199,11 @@
   min-width: 0;
 }
 
+.fieldRowWide {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
 .fieldLabel {
   margin-bottom: 6px;
   display: block;

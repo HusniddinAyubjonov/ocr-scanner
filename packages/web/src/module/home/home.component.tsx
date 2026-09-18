@@ -31,7 +31,11 @@ const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
   { key: "sex", label: "Пол" },
   { key: "birthDate", label: "Дата рождения" },
   { key: "birthPlace", label: "Место рождения" },
+  { key: "address", label: "Адрес" },
+  { key: "personalIdNumber", label: "ID номер" },
+  { key: "authority", label: "Орган выдачи" },
   { key: "documentNumber", label: "Номер документа" },
+  { key: "nationalIdNumber", label: "Единый национальный ID" },
   { key: "issueDate", label: "Дата выдачи" },
   { key: "expiryDate", label: "Срок действия" },
   { key: "maritalStatus", label: "Семейное положение" },
@@ -237,7 +241,10 @@ export const Home = () => {
           <>
             <div className={styles.fieldsBlock}>
               {ID_CARD_FIELD_LABELS.map(({ key, label }) => (
-                <div key={key} className={styles.fieldRow}>
+                <div
+                  key={key}
+                  className={key === "address" ? styles.fieldRowWide : styles.fieldRow}
+                >
                   <label htmlFor={`id-field-${key}`} className={styles.fieldLabel}>
                     {label}
                   </label>
