@@ -48,22 +48,32 @@ const LATIN_CAPS_WORD = /^[A-Z]{2,}$/
 // specifically for MRZ lines since no genuine Cyrillic ever belongs there.
 const CYRILLIC_TO_LATIN: Record<string, string> = {
   А: "A",
+  а: "a",
   В: "B",
   Е: "E",
+  е: "e",
+  Ѕ: "S",
+  ѕ: "s",
   К: "K",
   М: "M",
   Н: "H",
   О: "O",
+  о: "o",
   Р: "P",
+  р: "p",
   С: "C",
+  с: "c",
   Т: "T",
   Х: "X",
+  х: "x",
   У: "Y",
+  у: "y",
   І: "I",
+  і: "i",
 }
 
 const normalizeLookalikes = (value: string): string =>
-  value.replace(/[АВЕКМНОРСТХУІ]/g, (char) => CYRILLIC_TO_LATIN[char] ?? char)
+  value.replace(/[АаВЕеЅѕКМНОоРрСсТХхУуІі]/g, (char) => CYRILLIC_TO_LATIN[char] ?? char)
 
 // Document numbers are always "one letter, then only digits" — Tesseract
 // frequently reads a digit 0 as the letter O (identical glyph in most fonts),
@@ -112,7 +122,7 @@ const FIELD_LABELS: Record<
   // sometimes flattens to the plain Cyrillic letter — so both spellings are
   // accepted throughout.
   fatherName: [/номи\s*падар/i, /father.?s?\s*name/i],
-  birthPlace: [/[чц]ои\s*таваллуд/i, /place\s*of\s*birth/i],
+  birthPlace: [/[чцҷ]ои\s*таваллуд/i, /place\s*of\s*birth/i],
   // "Мақоми шиносномадиханда" is the full Tajik phrase ("issuing
   // authority") — stripping only "Мақоми" left "шиносномадиханда" behind
   // looking exactly like a plausible short value.
@@ -222,6 +232,15 @@ const findNamePairs = (lines: string[]): string[] => {
   return pairs
 }
 
+// The combined "Sex Nationality Date of birth Place of birth" header row
+// contains the English phrase "place of birth" — extractLabeledField must not
+// mistake that header for a dedicated birthPlace label, or it falls through
+// to the header's own value row (sex + birth date) as if it were the value.
+const isBirthRowHeader = (line: string): boolean => {
+  const normalized = normalizeLookalikes(line)
+  return /\bsex\b/i.test(normalized) && /date\s*of\s*birth/i.test(normalized)
+}
+
 const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean): string[] => {
   const headerIndex = lines.findIndex(isHeader)
 
@@ -234,8 +253,16 @@ const findRowAfterHeader = (lines: string[], isHeader: (line: string) => boolean
   return next ? next.split(/\s+/).filter(Boolean) : []
 }
 
-const extractLabeledField = (lines: string[], labelPatterns: RegExp[]): string => {
+const extractLabeledField = (
+  lines: string[],
+  labelPatterns: RegExp[],
+  skipIf?: (line: string) => boolean,
+): string => {
   for (let i = 0; i < lines.length; i += 1) {
+    if (skipIf?.(lines[i])) {
+      continue
+    }
+
     const isLabelLine = labelPatterns.some((pattern) => pattern.test(lines[i]))
     if (!isLabelLine) {
       continue
@@ -327,7 +354,7 @@ export const extractIdCardFields = (text: string): IdCardFields => {
 
   const fromLabels: Partial<IdCardFields> = {
     fatherName: extractLabeledField(lines, FIELD_LABELS.fatherName),
-    birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace),
+    birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, isBirthRowHeader),
     authority: extractLabeledField(lines, FIELD_LABELS.authority),
     documentNumber: extractLabeledField(lines, FIELD_LABELS.documentNumber),
     maritalStatus: extractLabeledField(lines, FIELD_LABELS.maritalStatus),
@@ -348,11 +375,8 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     fromLabels.givenNames = findCapsWordAfterLabel(lines, GIVEN_NAME_LABEL)
   }
 
-  const birthRow = findRowAfterHeader(
-    lines,
-    (line) => /\bsex\b/i.test(line) && /date\s*of\s*birth/i.test(line),
-  )
-  const sexToken = birthRow.find((token) => /^[MF]+$/.test(token))
+  const birthRow = findRowAfterHeader(lines, isBirthRowHeader)
+  const sexToken = birthRow.map(normalizeLookalikes).find((token) => /^[MF]+$/.test(token))
   const birthDateToken = birthRow.find((token) => DATE_PATTERN.test(token))
 
   if (sexToken) fromLabels.sex = sexToken[0]
@@ -450,6 +474,14 @@ export const extractIdCardFields = (text: string): IdCardFields => {
         break
       }
     }
+  }
+
+  // A garbled label run can fuse straight into the value with no separator
+  // ("MYYAPPAYSINGLE") — if a known status word is recognizable inside it,
+  // that word alone is a cleaner result than the whole fused string.
+  const maritalStatusMatch = fields.maritalStatus.match(/married|single|divorced|widowed/i)
+  if (maritalStatusMatch) {
+    fields.maritalStatus = maritalStatusMatch[0].toUpperCase()
   }
 
   return fields
