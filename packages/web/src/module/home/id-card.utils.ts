@@ -421,5 +421,36 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     }
   }
 
+  // When the "Sex ... Date of birth" header itself is too garbled to match,
+  // the sex marker still often survives right next to a date on the same
+  // value row (e.g. "MM TYKTJK 29.07.2001") — OCR sometimes doubles the
+  // letter, and may read it as the Cyrillic М lookalike.
+  if (!fields.sex) {
+    const rowWithSex = lines
+      .map((line) => normalizeLookalikes(line))
+      .find((line) => DATE_PATTERN.test(line) && /\b[MF]{1,2}\b/.test(line))
+
+    if (rowWithSex) {
+      fields.sex = rowWithSex.match(/\b([MF])\1?\b/)?.[1] ?? ""
+    }
+  }
+
+  // Same idea for the issue/expiry row: when its header is too garbled to
+  // recognize, a line carrying two dates back to back is almost certainly
+  // that row printed as "issue expiry [national id]".
+  if (!fields.issueDate || !fields.expiryDate) {
+    const datesInLine = new RegExp(DATE_PATTERN.source, "g")
+
+    for (const line of lines) {
+      const matches = line.match(datesInLine)
+
+      if (matches && matches.length >= 2) {
+        if (!fields.issueDate) fields.issueDate = matches[0]
+        if (!fields.expiryDate) fields.expiryDate = matches[1]
+        break
+      }
+    }
+  }
+
   return fields
 }
