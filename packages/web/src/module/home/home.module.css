@@ -184,6 +184,57 @@
   text-align: center;
 }
 
+.fieldsBlock {
+  margin: 24px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.fieldRow {
+  min-width: 0;
+}
+
+.fieldLabel {
+  margin-bottom: 6px;
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3730a3;
+}
+
+.fieldInput {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #c7d2fe;
+  background: #ffffff;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.fieldInput:focus {
+  border-color: #4338ca;
+}
+
+.toggleRawButton {
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .textareaBlock {
   margin: 24px 0;
 }

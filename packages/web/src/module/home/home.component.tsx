@@ -5,6 +5,8 @@ import type { ChangeEvent } from "react"
 import { createWorker, PSM } from "tesseract.js"
 import { Modal } from "@/ui-component/modal/modal.component"
 import { extractCleanText, preprocessImage } from "./home.utils"
+import { EMPTY_ID_CARD_FIELDS, extractIdCardFields, isIdCardText } from "./id-card.utils"
+import type { IdCardFields } from "./id-card.utils"
 import styles from "./home.module.css"
 
 const OCR_LANGUAGES = "eng+rus+tgk"
@@ -22,9 +24,27 @@ const INITIAL_SLOTS: Slot[] = [
   { label: "Фото 2 (оборотная сторона)", image: null, isRecognizing: false, progress: 0, error: null },
 ]
 
+const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
+  { key: "surname", label: "Фамилия" },
+  { key: "givenNames", label: "Имя" },
+  { key: "fatherName", label: "Имя отца" },
+  { key: "sex", label: "Пол" },
+  { key: "birthDate", label: "Дата рождения" },
+  { key: "birthPlace", label: "Место рождения" },
+  { key: "documentNumber", label: "Номер документа" },
+  { key: "issueDate", label: "Дата выдачи" },
+  { key: "expiryDate", label: "Срок действия" },
+  { key: "maritalStatus", label: "Семейное положение" },
+  { key: "bloodGroup", label: "Группа крови" },
+]
+
 export const Home = () => {
   const [slots, setSlots] = useState<Slot[]>(INITIAL_SLOTS)
+  const [rawTexts, setRawTexts] = useState<string[]>(["", ""])
   const [recognizedText, setRecognizedText] = useState("")
+  const [isIdCard, setIsIdCard] = useState(false)
+  const [idCardFields, setIdCardFields] = useState<IdCardFields>(EMPTY_ID_CARD_FIELDS)
+  const [showRawText, setShowRawText] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const updateSlot = (index: number, patch: Partial<Slot>) => {
@@ -58,6 +78,16 @@ export const Home = () => {
       const newText = extractCleanText(result.data)
 
       setRecognizedText((current) => (current.trim() ? `${current}\n${newText}` : newText))
+
+      setRawTexts((current) => {
+        const next = current.map((text, i) => (i === index ? newText : text))
+        const combined = next.filter(Boolean).join("\n")
+
+        setIsIdCard(isIdCardText(combined))
+        setIdCardFields(extractIdCardFields(combined))
+
+        return next
+      })
     } catch (error) {
       console.error("OCR error:", error)
       updateSlot(index, {
@@ -91,13 +121,25 @@ export const Home = () => {
     updateSlot(index, { image: null, error: null, progress: 0 })
   }
 
+  const handleIdFieldChange = (key: keyof IdCardFields, value: string) => {
+    setIdCardFields((current) => ({ ...current, [key]: value }))
+  }
+
+  const isSubmittable = isIdCard
+    ? Object.values(idCardFields).some((value) => value.trim())
+    : Boolean(recognizedText.trim())
+
   const handleSubmit = () => {
-    if (!recognizedText.trim()) {
+    if (!isSubmittable) {
       return
     }
 
     setSlots(INITIAL_SLOTS)
+    setRawTexts(["", ""])
     setRecognizedText("")
+    setIsIdCard(false)
+    setIdCardFields(EMPTY_ID_CARD_FIELDS)
+    setShowRawText(false)
     setIsModalOpen(true)
   }
 
@@ -191,25 +233,66 @@ export const Home = () => {
           </div>
         ))}
 
-        <div className={styles.textareaBlock}>
-          <label htmlFor="recognizedText" className={styles.textareaLabel}>
-            Распознанный текст
-          </label>
+        {isIdCard ? (
+          <>
+            <div className={styles.fieldsBlock}>
+              {ID_CARD_FIELD_LABELS.map(({ key, label }) => (
+                <div key={key} className={styles.fieldRow}>
+                  <label htmlFor={`id-field-${key}`} className={styles.fieldLabel}>
+                    {label}
+                  </label>
+                  <input
+                    id={`id-field-${key}`}
+                    type="text"
+                    value={idCardFields[key]}
+                    onChange={(event) => handleIdFieldChange(key, event.target.value)}
+                    placeholder="Не найдено"
+                    className={styles.fieldInput}
+                  />
+                </div>
+              ))}
+            </div>
 
-          <textarea
-            id="recognizedText"
-            value={recognizedText}
-            onChange={(event) => setRecognizedText(event.target.value)}
-            placeholder="Здесь появится распознанный текст..."
-            rows={8}
-            className={styles.textarea}
-          />
-        </div>
+            <button
+              type="button"
+              onClick={() => setShowRawText((current) => !current)}
+              className={styles.toggleRawButton}
+            >
+              {showRawText ? "Скрыть весь распознанный текст" : "Показать весь распознанный текст"}
+            </button>
+
+            {showRawText && (
+              <div className={styles.textareaBlock}>
+                <textarea
+                  value={recognizedText}
+                  onChange={(event) => setRecognizedText(event.target.value)}
+                  rows={8}
+                  className={styles.textarea}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className={styles.textareaBlock}>
+            <label htmlFor="recognizedText" className={styles.textareaLabel}>
+              Распознанный текст
+            </label>
+
+            <textarea
+              id="recognizedText"
+              value={recognizedText}
+              onChange={(event) => setRecognizedText(event.target.value)}
+              placeholder="Здесь появится распознанный текст..."
+              rows={8}
+              className={styles.textarea}
+            />
+          </div>
+        )}
 
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!recognizedText.trim() || isRecognizing}
+          disabled={!isSubmittable || isRecognizing}
           className={styles.submitButton}
         >
           Отправить
