@@ -1,3 +1,4 @@
+import { parse as parseMrz } from "mrz"
 import type { Bbox, Page } from "tesseract.js"
 import type { IdCardFields } from "./id-card.utils"
 
@@ -335,21 +336,6 @@ export const extractLayoutFields = (
   return fields
 }
 
-const mrzCharacterValue = (character: string): number => {
-  if (character === "<") return 0
-  if (/\d/.test(character)) return Number(character)
-  return character.charCodeAt(0) - 55
-}
-const validCheckDigit = (value: string, checkDigit: string): boolean => {
-  if (!/^\d$/.test(checkDigit) || !/^[A-Z0-9<]+$/.test(value)) return false
-  const weights = [7, 3, 1]
-  const sum = [...value].reduce(
-    (total, character, index) =>
-      total + mrzCharacterValue(character) * weights[index % 3],
-    0,
-  )
-  return sum % 10 === Number(checkDigit)
-}
 const formatMrzDate = (value: string, expiry: boolean): string | null => {
   if (!/^\d{6}$/.test(value)) return null
   const shortYear = Number(value.slice(0, 2))
@@ -368,13 +354,47 @@ const formatMrzDate = (value: string, expiry: boolean): string | null => {
     ? `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.${year}`
     : null
 }
+const MRZ_LINE_LENGTH = 30
+
+// OCR drops or adds filler characters at the end of a line, so lines a
+// little short are padded with "<" (the MRZ filler) rather than shifted.
 const normalizeMrz = (text: string): string[] =>
   text
     .toUpperCase()
     .split("\n")
     .map((line) => line.replace(/[^A-Z0-9<]/g, ""))
-    .filter((line) => line.length >= 28 && line.length <= 32)
-    .map((line) => (line.length === 30 ? line : line.slice(0, 30)))
+    .filter((line) => line.length >= 26 && line.length <= 34)
+    .map((line) => line.slice(0, MRZ_LINE_LENGTH).padEnd(MRZ_LINE_LENGTH, "<"))
+
+const DIGIT_LOOKALIKES: Record<string, string> = {
+  O: "0",
+  D: "0",
+  Q: "0",
+  I: "1",
+  L: "1",
+  Z: "2",
+  S: "5",
+  G: "6",
+  B: "8",
+}
+
+// Positions that must be digits by the TD1 layout: line 1 = document number
+// tail + its check digit; line 2 = birth date, its check digit, expiry date
+// and its check digit. Letters there are misread digits.
+const fixDigitPositions = (line: string, from: number, to: number): string =>
+  [...line]
+    .map((character, index) =>
+      index >= from && index <= to ? (DIGIT_LOOKALIKES[character] ?? character) : character,
+    )
+    .join("")
+
+const repairMrzLines = (lines: string[]): string[] => [
+  fixDigitPositions(lines[0], 6, 14),
+  fixDigitPositions(fixDigitPositions(lines[1], 0, 6), 8, 14),
+  lines[2],
+]
+
+const MRZ_FALLBACK_NAME = /^[A-Z][A-Z -]{1,}$/
 
 export const extractMrzFields = (
   mrzText: string,
@@ -382,73 +402,39 @@ export const extractMrzFields = (
 ): Partial<Record<IdCardFieldKey, RecognizedField>> => {
   const lines = normalizeMrz(mrzText)
   if (lines.length < 3) return {}
-  const [firstLine, secondLine, thirdLine] = lines.slice(-3)
-  const fields: Partial<Record<IdCardFieldKey, RecognizedField>> = {}
-  const safeConfidence = Math.round(Math.max(0, Math.min(100, confidence)))
-  const validDocumentCheck = validCheckDigit(
-    firstLine.slice(5, 14),
-    firstLine[14],
-  )
-  const validBirthCheck = validCheckDigit(secondLine.slice(0, 6), secondLine[6])
-  const validExpiryCheck = validCheckDigit(
-    secondLine.slice(8, 14),
-    secondLine[14],
-  )
-  if (
-    [validDocumentCheck, validBirthCheck, validExpiryCheck].filter(Boolean)
-      .length < 2
-  )
+  let result: ReturnType<typeof parseMrz>
+  try {
+    result = parseMrz(repairMrzLines(lines.slice(-3)), { autocorrect: true })
+  } catch {
     return {}
-  const documentNumber = firstLine.slice(5, 14).replace(/</g, "")
-  if (validDocumentCheck && /^[A-Z0-9]{6,9}$/.test(documentNumber))
-    fields.documentNumber = {
-      value: documentNumber,
-      confidence: safeConfidence,
-      source: "mrz",
-    }
-  const birthDateChars = secondLine.slice(0, 6)
-  const birthDate = validBirthCheck
-    ? formatMrzDate(birthDateChars, false)
-    : null
-  if (birthDate)
-    fields.birthDate = {
-      value: birthDate,
-      confidence: safeConfidence,
-      source: "mrz",
-    }
-  const sex = secondLine[7]
-  if (sex === "M" || sex === "F")
-    fields.sex = { value: sex, confidence: safeConfidence, source: "mrz" }
-  const expiryChars = secondLine.slice(8, 14)
-  const expiryDate = validExpiryCheck ? formatMrzDate(expiryChars, true) : null
-  if (expiryDate)
-    fields.expiryDate = {
-      value: expiryDate,
-      confidence: safeConfidence,
-      source: "mrz",
-    }
-  const citizenship = secondLine.slice(15, 18)
-  if (/^[A-Z]{3}$/.test(citizenship))
-    fields.citizenship = {
-      value: citizenship,
-      confidence: safeConfidence,
-      source: "mrz",
-    }
-  const [surnameChars, givenNameChars = ""] = thirdLine.split("<<")
-  const surname = surnameChars.replace(/</g, " ").trim()
-  const givenNames = givenNameChars.replace(/</g, " ").trim()
-  if (/^[A-Z -]{2,}$/.test(surname))
-    fields.surname = {
-      value: surname,
-      confidence: safeConfidence,
-      source: "mrz",
-    }
-  if (/^[A-Z -]{2,}$/.test(givenNames))
-    fields.givenNames = {
-      value: givenNames,
-      confidence: safeConfidence,
-      source: "mrz",
-    }
+  }
+  const valid = (name: string): boolean =>
+    result.details.some((detail) => detail.field === name && detail.valid)
+  const documentOk = valid("documentNumberCheckDigit")
+  const birthOk = valid("birthDateCheckDigit")
+  const expiryOk = valid("expirationDateCheckDigit")
+  // Check digits are the only proof a read is correct; with fewer than two
+  // passing, the lines are too damaged to trust any field.
+  if ([documentOk, birthOk, expiryOk].filter(Boolean).length < 2) return {}
+  const safeConfidence = Math.round(Math.max(0, Math.min(100, confidence)))
+  const fields: Partial<Record<IdCardFieldKey, RecognizedField>> = {}
+  const set = (key: IdCardFieldKey, value: string | null | undefined) => {
+    if (value)
+      fields[key] = { value, confidence: safeConfidence, source: "mrz" }
+  }
+  const mrz = result.fields
+  if (documentOk && /^[A-Z0-9]{6,9}$/.test(mrz.documentNumber ?? ""))
+    set("documentNumber", mrz.documentNumber)
+  if (birthOk && mrz.birthDate)
+    set("birthDate", formatMrzDate(mrz.birthDate, false))
+  if (expiryOk && mrz.expirationDate)
+    set("expiryDate", formatMrzDate(mrz.expirationDate, true))
+  if (mrz.sex === "male") set("sex", "M")
+  if (mrz.sex === "female") set("sex", "F")
+  if (/^[A-Z]{3}$/.test(mrz.nationality ?? "")) set("citizenship", mrz.nationality)
+  if (MRZ_FALLBACK_NAME.test(mrz.lastName ?? "")) set("surname", mrz.lastName)
+  if (MRZ_FALLBACK_NAME.test(mrz.firstName ?? ""))
+    set("givenNames", mrz.firstName)
   return fields
 }
 
