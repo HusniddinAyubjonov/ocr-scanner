@@ -203,6 +203,17 @@ const findMrzLines = (lines: string[]): string[] =>
     .map((line) => normalizeLookalikes(line.replace(/\s+/g, "")))
     .filter((line) => line.includes("<") && MRZ_LINE_PATTERN.test(line))
 
+// Names on the card are printed in capitals, one script per line. A short
+// or mixed-case/mixed-script string ("wn ич", "BiLshob", "ДЕД") is OCR
+// noise, and showing it as data is worse than leaving the field empty.
+export const isPlausibleName = (value: string): boolean => {
+  const name = value.trim()
+  if (!/^[\p{Lu}\s'-]{4,}$/u.test(name)) return false
+  const hasLatin = /\p{Script=Latin}/u.test(name)
+  const hasCyrillic = /\p{Script=Cyrillic}/u.test(name)
+  return !(hasLatin && hasCyrillic)
+}
+
 export const isIdCardText = (text: string): boolean => {
   const lines = text.split("\n").map((line) => line.trim())
   return ID_CARD_MARKERS.test(text) || findMrzLines(lines).length >= 2
@@ -658,6 +669,10 @@ export const extractIdCardFields = (text: string): IdCardFields => {
         if (!fields.expiryDate) fields.expiryDate = remaining[remaining.length - 1]
       }
     }
+  }
+
+  for (const key of ["surname", "givenNames", "fatherName"] as const) {
+    if (fields[key] && !isPlausibleName(fields[key])) fields[key] = ""
   }
 
   // A garbled label run can fuse straight into the value with no separator

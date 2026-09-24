@@ -1,7 +1,7 @@
 import { createWorker, OEM, PSM } from "tesseract.js"
 import type { Page } from "tesseract.js"
 import { extractCleanText } from "./home.utils"
-import { extractIdCardFields } from "./id-card.utils"
+import { extractIdCardFields, isPlausibleName } from "./id-card.utils"
 import {
   extractLayoutFields,
   extractMrzFields,
@@ -40,7 +40,14 @@ const dropLabelValues = (fields: FieldMap): FieldMap => {
   const cleaned: FieldMap = {}
   for (const key of Object.keys(fields) as IdCardFieldKey[]) {
     const field = fields[key]
-    if (field && !LABEL_WORDS.test(field.value.trim())) cleaned[key] = field
+    const isName =
+      key === "surname" || key === "givenNames" || key === "fatherName"
+    if (
+      field &&
+      !LABEL_WORDS.test(field.value.trim()) &&
+      (!isName || isPlausibleName(field.value))
+    )
+      cleaned[key] = field
   }
   return cleaned
 }
