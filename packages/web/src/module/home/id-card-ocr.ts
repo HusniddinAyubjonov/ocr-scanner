@@ -8,6 +8,7 @@ import {
   mergeRecognizedFields,
 } from "./id-card-recognition"
 import type { IdCardFieldKey, RecognizedField } from "./id-card-recognition"
+import { recognizeFrontZones } from "./id-card-zones"
 import type { OcrResult, PreprocessingVariant } from "./scanner.types"
 
 const OCR_LANGUAGES = ["eng", "rus", "tgk"]
@@ -26,6 +27,7 @@ export type IdCardOcrOutput = {
 }
 
 type RecognizeIdCardOptions = {
+  side?: "front" | "back"
   variants: PreprocessingVariant[]
   onStatus: (message: string, progress: number) => void
   shouldContinue: () => boolean
@@ -80,6 +82,7 @@ const probableMrzLineCount = (page: Page): number =>
     .filter((line) => line.length >= 28 && line.length <= 32).length
 
 export const recognizeIdCard = async ({
+  side,
   variants,
   onStatus,
   shouldContinue,
@@ -161,12 +164,24 @@ export const recognizeIdCard = async ({
       const bestScore = best.confidence + probableMrzLineCount(best) * 25
       return score > bestScore ? page : best
     })
+    let zoneFields: FieldMap = {}
+    if (side === "front") {
+      onStatus("Распознавание полей по зонам", 0)
+      const zoneVariant =
+        variants.find((variant) => variant.id === "contrast") ?? bestVariant
+      zoneFields = await recognizeFrontZones(
+        worker,
+        zoneVariant.image,
+        shouldContinue,
+      )
+    }
     return {
       ocrResult: bestCandidate.result,
       rawText: bestCandidate.result.text,
       mrzText: bestMrzPage.text.trim(),
       mrzConfidence: bestMrzPage.confidence,
       fields: mergeRecognizedFields(
+        zoneFields,
         dropLabelValues(extractLayoutFields(bestCandidate.page)),
         extractTextFields(bestCandidate.result.text),
         extractMrzFields(bestMrzPage.text, bestMrzPage.confidence),

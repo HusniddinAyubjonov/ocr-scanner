@@ -261,6 +261,7 @@ export const Home = () => {
         },
       }))
       const ocrOutput = await recognizeIdCard({
+        side: activeSide,
         variants,
         shouldContinue: () => operationId === operationIdRef.current,
         onStatus: (message, progress) =>
