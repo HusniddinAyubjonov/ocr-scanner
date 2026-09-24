@@ -167,7 +167,7 @@ const FIELD_LABELS: Record<
   // authority") — stripping only "Мақоми" left "шиносномадиханда" behind
   // looking exactly like a plausible short value.
   authority: [/ма[кқ]оми(\s*шиносномадиханда)?/i, /\bauthority\b/i],
-  documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?no\.?/i],
+  documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?(no|№)\.?/i],
   maritalStatus: [/вазъи\s*оилав[^\s/]*/i, /marital\s*status/i],
   // The word(s) after "гурӯҳи" ("group") vary wildly by OCR pass (хун, кум,
   // хун ва резуси, ...) — this is descriptive label text ("blood group and
@@ -185,7 +185,7 @@ const SURNAME_LABEL = [/насаб/i, /surname/i]
 const GIVEN_NAME_LABEL = [/^ном\//i]
 
 const LABEL_LINE_MARKERS =
-  /насаб|surname|номи\s*па[а-яёa-z]{2,4}|father|[чҷ]инс|шаҳрванд|таваллу|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
+  /насаб|surname|номи\s*па[а-яёa-z]{2,4}|father|[чҷ]инс|шаҳрванд|таваллу|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?(no|№)|holder|имзои|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
 
 const isKnownLabelLine = (line: string): boolean =>
   LABEL_LINE_MARKERS.test(line) ||
@@ -518,11 +518,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   if (validityRow[1]) fromLabels.expiryDate = validityRow[1]
   if (validityRow[2]) fromLabels.nationalIdNumber = validityRow[2]
 
-  if (fromLabels.documentNumber) {
-    fromLabels.documentNumber = fixDocumentNumberDigits(
-      fromLabels.documentNumber,
-    )
-  }
 
   const fromMrz = parseMrz(lines)
 
