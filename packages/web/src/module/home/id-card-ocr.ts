@@ -1,6 +1,7 @@
 import { createWorker, OEM, PSM } from "tesseract.js"
 import type { Page } from "tesseract.js"
 import { extractCleanText } from "./home.utils"
+import { extractIdCardFields } from "./id-card.utils"
 import {
   extractLayoutFields,
   extractMrzFields,
@@ -28,6 +29,37 @@ type RecognizeIdCardOptions = {
   variants: PreprocessingVariant[]
   onStatus: (message: string, progress: number) => void
   shouldContinue: () => boolean
+}
+
+const LABEL_WORDS =
+  /насаб|surname|номи|падар|падap|napap|father|^ном\b|^(name|мате|mate|nате|наме)$|birth|таваллуд|санаи|document|рақами|раками|шиноснома|nationality|authority|мақоми|address|нишон|issue|expiry|place\s*of|^sex$|чинс/i
+
+type FieldMap = Partial<Record<IdCardFieldKey, RecognizedField>>
+
+const dropLabelValues = (fields: FieldMap): FieldMap => {
+  const cleaned: FieldMap = {}
+  for (const key of Object.keys(fields) as IdCardFieldKey[]) {
+    const field = fields[key]
+    if (field && !LABEL_WORDS.test(field.value.trim())) cleaned[key] = field
+  }
+  return cleaned
+}
+
+const TEXT_PARSER_CONFIDENCE = 80
+
+const extractTextFields = (text: string): FieldMap => {
+  const parsed = extractIdCardFields(text)
+  const fields: FieldMap = {}
+  for (const key of Object.keys(parsed) as IdCardFieldKey[]) {
+    const value = parsed[key].trim()
+    if (value)
+      fields[key] = {
+        value,
+        confidence: TEXT_PARSER_CONFIDENCE,
+        source: "layout",
+      }
+  }
+  return fields
 }
 
 const candidateScore = (candidate: OcrCandidate): number =>
@@ -128,7 +160,8 @@ export const recognizeIdCard = async ({
       mrzText: bestMrzPage.text.trim(),
       mrzConfidence: bestMrzPage.confidence,
       fields: mergeRecognizedFields(
-        extractLayoutFields(bestCandidate.page),
+        dropLabelValues(extractLayoutFields(bestCandidate.page)),
+        extractTextFields(bestCandidate.result.text),
         extractMrzFields(bestMrzPage.text, bestMrzPage.confidence),
       ),
     }
