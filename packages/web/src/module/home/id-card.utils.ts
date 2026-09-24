@@ -90,7 +90,26 @@ const fixDocumentNumberDigits = (value: string): string => {
     return value
   }
 
-  return normalizeLookalikes(value[0]) + value.slice(1).replace(/[^0-9]/g, "0")
+  const DIGIT_LOOKALIKES: Record<string, string> = {
+    З: "3",
+    з: "3",
+    Z: "2",
+    Ѕ: "5",
+    S: "5",
+    б: "6",
+    В: "8",
+    B: "8",
+    I: "1",
+    l: "1",
+    І: "1",
+  }
+
+  return (
+    normalizeLookalikes(value[0]) +
+    value
+      .slice(1)
+      .replace(/[^0-9]/g, (char) => DIGIT_LOOKALIKES[char] ?? "0")
+  )
 }
 
 const hasEnoughLetters = (text: string): boolean =>
@@ -166,7 +185,7 @@ const SURNAME_LABEL = [/насаб/i, /surname/i]
 const GIVEN_NAME_LABEL = [/^ном\//i]
 
 const LABEL_LINE_MARKERS =
-  /насаб|surname|номи\s*падар|father|чинс|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
+  /насаб|surname|номи\s*падар|father|[чҷ]инс|шаҳрванд|таваллу|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
 
 const isKnownLabelLine = (line: string): boolean =>
   LABEL_LINE_MARKERS.test(line) ||
@@ -417,13 +436,25 @@ const extractPersonalIdNumber = (lines: string[]): string => {
 }
 
 export const extractIdCardFields = (text: string): IdCardFields => {
+  // OCR spaces out dates ("49. 07. 2034") and misreads a leading 0 of the
+  // day as 4-9, so a day above 31 is treated as its 0X form.
+  const normalizeDates = (line: string): string =>
+    line
+      .replace(/(\d{1,2})\s*[.,]\s*(\d{1,2})\s*[.,]\s*(\d{4})/g, "$1.$2.$3")
+      .replace(/\b([4-9])(\d)\.(\d{2})\.(\d{4})\b/g, "0$2.$3.$4")
+
   const lines = text
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => normalizeDates(line.trim()))
     .filter(Boolean)
 
+  const isPlainName = (value: string): boolean =>
+    /^[\p{L}\s'-]{2,}$/u.test(value) && looksLikeValue(value)
+
   const fromLabels: Partial<IdCardFields> = {
-    fatherName: extractLabeledField(lines, FIELD_LABELS.fatherName),
+    fatherName: extractLabeledField(lines, FIELD_LABELS.fatherName, {
+      isValidValue: isPlainName,
+    }),
     birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, {
       skipIf: isBirthRowHeader,
     }),
@@ -508,13 +539,22 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     }
   }
 
+  // A document number is one letter then digits — with digits often read
+  // as lookalike letters (О, З, Ѕ...). A label-derived value that isn't
+  // that shape is a neighbouring garbled line; the real number is usually
+  // a bare line a little further down.
+  const DOC_NUMBER_SHAPE = /^[A-ZА-ЯЁ][0-9OОDЗзSЅбВBIlІ]{6,9}$/
+  if (fields.documentNumber && !DOC_NUMBER_SHAPE.test(fields.documentNumber)) {
+    fields.documentNumber = ""
+  }
+
   if (!fields.documentNumber) {
     const standaloneMatch = lines
-      .map((line) => line.match(/^[A-ZА-ЯЁ]{1,3}\d{6,9}$/))
-      .find(Boolean)
+      .map((line) => line.replace(/\s+/g, ""))
+      .find((line) => DOC_NUMBER_SHAPE.test(line))
 
     if (standaloneMatch) {
-      fields.documentNumber = fixDocumentNumberDigits(standaloneMatch[0])
+      fields.documentNumber = fixDocumentNumberDigits(standaloneMatch)
     }
   }
 
@@ -586,6 +626,27 @@ export const extractIdCardFields = (text: string): IdCardFields => {
         if (!fields.issueDate) fields.issueDate = matches[0]
         if (!fields.expiryDate) fields.expiryDate = matches[1]
         break
+      }
+    }
+
+    // Dates on separate lines: whatever dates remain after the birth date
+    // (and address registration dates) are issue (earliest) and expiry
+    // (latest).
+    if (!fields.issueDate || !fields.expiryDate) {
+      const year = (date: string): number => Number(date.slice(-4))
+      const remaining = [
+        ...new Set(
+          lines
+            .filter((line) => !/сол/i.test(line))
+            .flatMap((line) => line.match(new RegExp(DATE_PATTERN.source, "g")) ?? []),
+        ),
+      ]
+        .filter((date) => date !== fields.birthDate && year(date) > 2000)
+        .sort((a, b) => year(a) - year(b))
+
+      if (remaining.length >= 2) {
+        if (!fields.issueDate) fields.issueDate = remaining[0]
+        if (!fields.expiryDate) fields.expiryDate = remaining[remaining.length - 1]
       }
     }
   }
