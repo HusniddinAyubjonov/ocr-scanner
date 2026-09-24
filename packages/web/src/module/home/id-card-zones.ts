@@ -22,10 +22,12 @@ type Zone = {
   h: number
 }
 
+// Name zones (surname, given name, father's name) are deliberately not read
+// here yet: a restricted character set forces *some* name-shaped letters out
+// of any crop, so a zone that misses its line yields confident garbage. They
+// come back once the rectangles are calibrated on real captures and can be
+// cross-checked against the MRZ.
 export const FRONT_ZONES: Zone[] = [
-  { key: "surname", kind: "latinName", x: 0.37, y: 0.318, w: 0.4, h: 0.055 },
-  { key: "givenNames", kind: "latinName", x: 0.37, y: 0.445, w: 0.4, h: 0.055 },
-  { key: "fatherName", kind: "latinName", x: 0.37, y: 0.577, w: 0.5, h: 0.055 },
   { key: "birthDate", kind: "date", x: 0.585, y: 0.69, w: 0.15, h: 0.055 },
   { key: "issueDate", kind: "date", x: 0.365, y: 0.79, w: 0.135, h: 0.055 },
   { key: "expiryDate", kind: "date", x: 0.585, y: 0.795, w: 0.15, h: 0.055 },

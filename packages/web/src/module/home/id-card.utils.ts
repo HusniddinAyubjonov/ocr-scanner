@@ -276,13 +276,67 @@ const parseMrz = (lines: string[]): Partial<IdCardFields> => {
   return fields
 }
 
+// A name is printed twice on the card, in Cyrillic and in Latin, and the two
+// must be the same word. Comparing their consonant skeletons (vowels and
+// transliteration variants — Х/KH/H, Ч/CH/J, Қ/Q/K — differ freely) tells a
+// genuine name from OCR noise that merely looks like capitals.
+const CYRILLIC_SKELETON: Record<string, string> = {
+  Б: "B", В: "V", Г: "G", Ғ: "G", Д: "D", Ж: "J", З: "Z", К: "K", Қ: "K",
+  Л: "L", М: "M", Н: "N", П: "P", Р: "R", С: "S", Т: "T", Ф: "F", Х: "H",
+  Ҳ: "H", Ц: "S", Ч: "J", Ҷ: "J", Ш: "S", Щ: "S",
+}
+
+const cyrillicSkeleton = (word: string): string =>
+  [...word].map((character) => CYRILLIC_SKELETON[character] ?? "").join("")
+
+const latinSkeleton = (word: string): string =>
+  word
+    .replace(/KH/g, "H")
+    .replace(/SH/g, "S")
+    .replace(/CH/g, "J")
+    .replace(/TS/g, "S")
+    .replace(/Q/g, "K")
+    .replace(/C/g, "S")
+    .replace(/X/g, "H")
+    .replace(/W/g, "V")
+    .replace(/[AEIOUY]/g, "")
+    .replace(/[^A-Z]/g, "")
+
+const editDistance = (a: string, b: string): number => {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index)
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0]
+    row[0] = i
+    for (let j = 1; j <= b.length; j += 1) {
+      const current = row[j]
+      row[j] = Math.min(
+        row[j] + 1,
+        row[j - 1] + 1,
+        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+      )
+      previous = current
+    }
+  }
+  return row[b.length]
+}
+
+export const namesAgree = (cyrillic: string, latin: string): boolean => {
+  const first = cyrillicSkeleton(cyrillic.toUpperCase())
+  const second = latinSkeleton(latin.toUpperCase())
+  if (first.length < 2 || second.length < 2) return false
+  return (
+    editDistance(first, second) / Math.max(first.length, second.length) <= 0.25
+  )
+}
+
 const findNamePairs = (lines: string[]): string[] => {
   const pairs: string[] = []
 
   for (let i = 0; i < lines.length - 1; i += 1) {
     if (
       CYRILLIC_CAPS_WORD.test(lines[i]) &&
-      LATIN_CAPS_WORD.test(lines[i + 1])
+      LATIN_CAPS_WORD.test(lines[i + 1]) &&
+      namesAgree(lines[i], lines[i + 1])
     ) {
       pairs.push(lines[i])
     }
@@ -394,10 +448,17 @@ const findCapsWordAfterLabel = (
       continue
     }
 
-    const next = lines[i + 1]?.trim()
+    const cyrillic = lines[i + 1]?.trim() ?? ""
+    const latin = lines[i + 2]?.trim() ?? ""
 
-    if (next && (CYRILLIC_CAPS_WORD.test(next) || LATIN_CAPS_WORD.test(next))) {
-      return next
+    // A lone word can't be verified, so only a matching Cyrillic + Latin
+    // pair under the label counts.
+    if (
+      CYRILLIC_CAPS_WORD.test(cyrillic) &&
+      LATIN_CAPS_WORD.test(latin) &&
+      namesAgree(cyrillic, latin)
+    ) {
+      return cyrillic
     }
   }
 
