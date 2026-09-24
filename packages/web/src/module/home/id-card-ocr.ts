@@ -10,7 +10,7 @@ import {
 import type { IdCardFieldKey, RecognizedField } from "./id-card-recognition"
 import type { OcrResult, PreprocessingVariant } from "./scanner.types"
 
-const OCR_LANGUAGES = ["eng", "rus", "tgk"]
+const OCR_LANGUAGES = ["tgk"]
 
 type OcrCandidate = {
   result: OcrResult
