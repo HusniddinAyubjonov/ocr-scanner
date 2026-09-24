@@ -161,7 +161,7 @@ const FIELD_LABELS: Record<
   // OCR is inconsistent about the "қ"/"ҳ"/"ӣ" hooks — sometimes keeps them,
   // sometimes flattens to the plain Cyrillic letter — so both spellings are
   // accepted throughout.
-  fatherName: [/номи\s*падар/i, /father.?s?\s*name/i],
+  fatherName: [/номи\s*па[а-яёa-z]{2,4}/i, /father.?s?\s*name/i],
   birthPlace: [/[чцҷ]ои\s*таваллуд/i, /place\s*of\s*birth/i],
   // "Мақоми шиносномадиханда" is the full Tajik phrase ("issuing
   // authority") — stripping only "Мақоми" left "шиносномадиханда" behind
@@ -185,7 +185,7 @@ const SURNAME_LABEL = [/насаб/i, /surname/i]
 const GIVEN_NAME_LABEL = [/^ном\//i]
 
 const LABEL_LINE_MARKERS =
-  /насаб|surname|номи\s*падар|father|[чҷ]инс|шаҳрванд|таваллу|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
+  /насаб|surname|номи\s*па[а-яёa-z]{2,4}|father|[чҷ]инс|шаҳрванд|таваллу|\bsex\b|[чц]ои\s*таваллуд|place\s*of(\s*birth)?|ра[кқ]ами?\s*шиноснома|ра[кқ]ами\s*ягонаи|document\s*(id\s*)?no|ма[кқ]оми|authority|date\s*of\s*(birth|issue|expiry)|national\s*id|вазъи\s*оилав|marital\s*status|гур[ӯу][хҳ]и|blood\s*group|^ном\/|шиноснома|identity\s*card|то[чц]икистон|republic\s*of\s*tajikistan/i
 
 const isKnownLabelLine = (line: string): boolean =>
   LABEL_LINE_MARKERS.test(line) ||
@@ -548,14 +548,28 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     fields.documentNumber = ""
   }
 
-  if (!fields.documentNumber) {
-    const standaloneMatch = lines
-      .map((line) => line.replace(/\s+/g, ""))
-      .find((line) => DOC_NUMBER_SHAPE.test(line))
+  const compact = lines.map((line) => line.replace(/\s+/g, ""))
+  let docNumberRaw = fields.documentNumber
+  if (!docNumberRaw) {
+    docNumberRaw = compact.find((line) => DOC_NUMBER_SHAPE.test(line)) ?? ""
+  }
 
-    if (standaloneMatch) {
-      fields.documentNumber = fixDocumentNumberDigits(standaloneMatch)
+  // Numbers are letter + 8 digits; OCR sometimes breaks the tail onto the
+  // next line ("A035799" / "76"), so re-attach it when it fits exactly.
+  const DOC_NUMBER_LENGTH = 9
+  const docIndex = compact.findIndex((line) => line === docNumberRaw)
+  if (docNumberRaw && docNumberRaw.length < DOC_NUMBER_LENGTH && docIndex >= 0) {
+    const tail = compact[docIndex + 1] ?? ""
+    if (
+      /^[0-9OОЗ]+$/.test(tail) &&
+      docNumberRaw.length + tail.length === DOC_NUMBER_LENGTH
+    ) {
+      docNumberRaw += tail
     }
+  }
+
+  if (docNumberRaw) {
+    fields.documentNumber = fixDocumentNumberDigits(docNumberRaw)
   }
 
   if (!fields.nationalIdNumber) {
