@@ -96,7 +96,7 @@ export const parseBackRead = (
   }
 }
 
-const ADDRESS_LINE_FLOOR = 50
+const ADDRESS_LINE_FLOOR = 40
 const AUTHORITY_FLOOR = 50
 const SHAPED_FLOOR = 40
 const PADDINGS = [0, 0.12, 0.3]

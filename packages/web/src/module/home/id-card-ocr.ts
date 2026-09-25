@@ -2,9 +2,11 @@ import { createWorker, OEM, PSM } from "tesseract.js"
 import type { Page } from "tesseract.js"
 import { extractCleanText } from "./home.utils"
 import { extractIdCardFields, isPlausibleName } from "./id-card.utils"
-import { mergeEnglishLabels } from "./id-card-language"
+import { isEnglishLabelText, mergeEnglishLabels } from "./id-card-language"
 import { recognizeBackZones } from "./id-card-back-zones"
 import { mrzLineBoxes, parseMrzText } from "./id-card-mrz"
+import { bottomRegion, locateMrz } from "./mrz-locator"
+import type { Region } from "./mrz-locator"
 import type { MrzResult } from "./id-card-mrz"
 import { buildNameEvidence, NAME_FIELDS, toOcrLines } from "./id-card-names"
 import type { NameEvidence } from "./id-card-names"
@@ -15,7 +17,11 @@ import {
 import type { IdCardFieldKey, RecognizedField } from "./id-card-recognition"
 import { recognizeFrontZones } from "./id-card-zones"
 import type { ZoneReadings } from "./id-card-zones"
-import type { OcrResult, PreprocessingVariant } from "./scanner.types"
+import type {
+  OcrResult,
+  PreprocessingVariant,
+  ProcessingImage,
+} from "./scanner.types"
 
 // One model per script. The Tajik model only knows Cyrillic: asked to read
 // Latin text it cannot output a single letter (only digits survive a Latin
@@ -61,6 +67,7 @@ const dropLabelValues = (fields: FieldMap): FieldMap => {
     if (
       field &&
       !LABEL_WORDS.test(field.value.trim()) &&
+      !isEnglishLabelText(field.value) &&
       (!isName || isPlausibleName(field.value))
     )
       cleaned[key] = field
@@ -75,7 +82,7 @@ const extractTextFields = (text: string): FieldMap => {
   const fields: FieldMap = {}
   for (const key of Object.keys(parsed) as IdCardFieldKey[]) {
     const value = parsed[key].trim()
-    if (value)
+    if (value && !isEnglishLabelText(value))
       fields[key] = {
         value,
         confidence: TEXT_PARSER_CONFIDENCE,
@@ -104,6 +111,36 @@ const onlyNames = (fields: FieldMap): Partial<Record<NameFieldKey, RecognizedFie
     if (field) names[key] = field
   }
   return names
+}
+
+const imagePixels = async (image: ProcessingImage): Promise<ImageData> => {
+  const bitmap = await createImageBitmap(image.blob)
+  const canvas = document.createElement("canvas")
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const context = canvas.getContext("2d", { willReadFrequently: true })
+  if (!context) throw new Error("Canvas недоступен для поиска MRZ.")
+  context.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  return context.getImageData(0, 0, canvas.width, canvas.height)
+}
+
+// Where to read the MRZ: the block found in the picture itself, then the
+// bottom of the picture as before. Any variant that shows the block will do,
+// since all variants are the same size.
+const mrzAreas = async (
+  variants: PreprocessingVariant[],
+  fallback: Region,
+): Promise<Region[]> => {
+  for (const variant of variants) {
+    const found = locateMrz(
+      (await imagePixels(variant.image)).data,
+      variant.image.width,
+      variant.image.height,
+    )
+    if (found) return [found, fallback]
+  }
+  return [fallback]
 }
 
 const mrzPageScore = (page: Page, mrz: MrzResult | null): number =>
@@ -177,44 +214,6 @@ export const recognizeIdCard = async ({
         (variant) => variant.id === bestCandidate.result.variantId,
       ) ?? variants[0]
 
-    onStatus("Отдельное распознавание MRZ", 0)
-    await englishWorker.setParameters({
-      tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
-      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
-      preserve_interword_spaces: "0",
-      user_defined_dpi: "300",
-    })
-    const mrzVariants = [
-      bestVariant,
-      ...variants.filter((variant) => variant.id !== bestVariant.id),
-    ].slice(0, 2)
-    let bestMrz: { page: Page; parsed: MrzResult | null } | null = null
-    for (const variant of mrzVariants) {
-      if (!shouldContinue()) throw new Error("OCR отменён.")
-      const top = Math.round(variant.image.height * 0.55)
-      const recognition = await englishWorker.recognize(
-        variant.image.blob,
-        {
-          rectangle: {
-            left: 0,
-            top,
-            width: variant.image.width,
-            height: variant.image.height - top,
-          },
-        },
-        { blocks: true },
-      )
-      const parsed = parseMrzText(recognition.data.text)
-      if (
-        !bestMrz ||
-        mrzPageScore(recognition.data, parsed) >
-          mrzPageScore(bestMrz.page, bestMrz.parsed)
-      )
-        bestMrz = { page: recognition.data, parsed }
-    }
-    const mrzPage = bestMrz?.page
-    const mrz = bestMrz?.parsed ?? null
-
     // The same image read by the English model: it fixes the English half of
     // the bilingual labels and supplies the Latin line under each name. Its
     // boxes line up with the Tajik page's because both read the same pixels.
@@ -232,6 +231,48 @@ export const recognizeIdCard = async ({
     )
     const tajikPage = mergeEnglishLabels(bestCandidate.page, english.data)
     const rawText = extractCleanText(tajikPage)
+
+    onStatus("Отдельное распознавание MRZ", 0)
+    await englishWorker.setParameters({
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
+      preserve_interword_spaces: "0",
+      user_defined_dpi: "300",
+    })
+    const mrzVariants = [
+      bestVariant,
+      ...variants.filter((variant) => variant.id !== bestVariant.id),
+    ].slice(0, 2)
+    // The front has no MRZ; on the back it is looked for where it really is.
+    const areas =
+      side === "front"
+        ? []
+        : await mrzAreas(
+            variants,
+            bottomRegion(bestVariant.image.width, bestVariant.image.height),
+          )
+    let bestMrz: { page: Page; parsed: MrzResult | null } | null = null
+    for (const [index, variant] of mrzVariants.entries())
+      for (const rectangle of areas) {
+        // The usual bottom area is only a second opinion on one variant when
+        // the block was found directly.
+        if (index > 0 && areas.length > 1 && rectangle === areas[1]) continue
+        if (!shouldContinue()) throw new Error("OCR отменён.")
+        const recognition = await englishWorker.recognize(
+          variant.image.blob,
+          { rectangle },
+          { blocks: true },
+        )
+        const parsed = parseMrzText(recognition.data.text)
+        if (
+          !bestMrz ||
+          mrzPageScore(recognition.data, parsed) >
+            mrzPageScore(bestMrz.page, bestMrz.parsed)
+        )
+          bestMrz = { page: recognition.data, parsed }
+      }
+    const mrzPage = bestMrz?.page
+    const mrz = bestMrz?.parsed ?? null
 
     let zones: ZoneReadings = { fields: {}, names: {} }
     if (side === "back") {
@@ -270,14 +311,14 @@ export const recognizeIdCard = async ({
       rawText,
       mrzText: mrzPage?.text.trim() ?? "",
       mrzConfidence: mrzPage?.confidence ?? 0,
-      fields: withoutNames(
-        mergeRecognizedFields(
-          zones.fields,
-          layoutFields,
-          textFields,
-          mrz?.fields ?? {},
-        ),
-      ),
+      // Reads of a known place on the card, and the MRZ with its check
+      // digits, are validated; what the page-wide parsers guess is not. So
+      // the guesses only fill what those leave empty, however confident the
+      // guess looks (a stray "of" from a label once beat a real "TJK").
+      fields: withoutNames({
+        ...mergeRecognizedFields(layoutFields, textFields),
+        ...mergeRecognizedFields(zones.fields, mrz?.fields ?? {}),
+      }),
       names: buildNameEvidence({
         tajikLines: toOcrLines(tajikPage),
         englishLines: toOcrLines(english.data),
