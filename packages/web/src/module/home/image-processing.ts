@@ -91,11 +91,17 @@ const blur3x3 = (source: Float32Array, width: number, height: number): Float32Ar
   return output
 }
 
-const defaultCorners = (width: number, height: number): DocumentCorners => ({
-  topLeft: { x: width * 0.06, y: height * 0.06 },
-  topRight: { x: width * 0.94, y: height * 0.06 },
-  bottomRight: { x: width * 0.94, y: height * 0.94 },
-  bottomLeft: { x: width * 0.06, y: height * 0.94 },
+// When no document outline is found, the whole frame is the best guess: a
+// photo taken with the camera guide, or of a card that fills the picture, is
+// already cropped to the card, and later steps cope with any scale or offset.
+const FALLBACK_INSET = 0.01
+const FALLBACK_CONFIDENCE = 0.4
+
+const wholeFrameCorners = (width: number, height: number): DocumentCorners => ({
+  topLeft: { x: width * FALLBACK_INSET, y: height * FALLBACK_INSET },
+  topRight: { x: width * (1 - FALLBACK_INSET), y: height * FALLBACK_INSET },
+  bottomRight: { x: width * (1 - FALLBACK_INSET), y: height * (1 - FALLBACK_INSET) },
+  bottomLeft: { x: width * FALLBACK_INSET, y: height * (1 - FALLBACK_INSET) },
 })
 
 export type DetectionResult = {
@@ -116,54 +122,12 @@ export const detectDocument = async (source: ProcessingImage): Promise<Detection
   context.drawImage(bitmap, 0, 0, width, height)
   bitmap.close()
   const imageData = context.getImageData(0, 0, width, height)
-  // A card lying on a differently coloured surface is found by colour; the
-  // edge-based search below only runs when that finds no clear outline.
+  // A card lying on a differently coloured surface is found by colour. When
+  // the card and the surface look alike there is no outline to find, and the
+  // user is asked to check the corners.
   const found = detectCardQuad(imageData.data, width, height)
-  let detectedCorners = found?.corners ?? defaultCorners(width, height)
-  let confidence = found?.confidence ?? 0
-  if (!found) {
-    const gray = blur3x3(grayscale(imageData.data), width, height)
-    const edges = new Float32Array(gray.length)
-    let edgeSum = 0
-    for (let row = 1; row < height - 1; row += 1) {
-      for (let column = 1; column < width - 1; column += 1) {
-        const index = row * width + column
-        const horizontal =
-          -gray[index - width - 1] + gray[index - width + 1] - 2 * gray[index - 1] +
-          2 * gray[index + 1] - gray[index + width - 1] + gray[index + width + 1]
-        const vertical =
-          -gray[index - width - 1] - 2 * gray[index - width] - gray[index - width + 1] +
-          gray[index + width - 1] + 2 * gray[index + width] + gray[index + width + 1]
-        const magnitude = Math.hypot(horizontal, vertical)
-        edges[index] = magnitude
-        edgeSum += magnitude
-      }
-    }
-    const edgeThreshold = (edgeSum / Math.max(1, (width - 2) * (height - 2))) * 2.2
-    const candidates: Point[] = []
-    const margin = Math.round(Math.min(width, height) * 0.025)
-    for (let row = margin; row < height - margin; row += 2) {
-      for (let column = margin; column < width - margin; column += 2) {
-        if (edges[row * width + column] >= edgeThreshold) candidates.push({ x: column, y: row })
-      }
-    }
-
-    if (candidates.length >= 40) {
-      const topLeft = candidates.reduce((best, point) => point.x + point.y < best.x + best.y ? point : best)
-      const bottomRight = candidates.reduce((best, point) => point.x + point.y > best.x + best.y ? point : best)
-      const topRight = candidates.reduce((best, point) => point.x - point.y > best.x - best.y ? point : best)
-      const bottomLeft = candidates.reduce((best, point) => point.y - point.x > best.y - best.x ? point : best)
-      const polygonArea = Math.abs(
-        topLeft.x * topRight.y + topRight.x * bottomRight.y + bottomRight.x * bottomLeft.y + bottomLeft.x * topLeft.y -
-        topLeft.y * topRight.x - topRight.y * bottomRight.x - bottomRight.y * bottomLeft.x - bottomLeft.y * topLeft.x,
-      ) / 2
-      const areaRatio = polygonArea / (width * height)
-      const edgeDensity = candidates.length / ((width * height) / 4)
-      confidence = Math.min(1, Math.max(0, areaRatio * 0.9 + Math.min(edgeDensity * 8, 0.25)))
-      if (areaRatio > 0.18) detectedCorners = { topLeft, topRight, bottomRight, bottomLeft }
-    }
-
-  }
+  const detectedCorners = found?.corners ?? wholeFrameCorners(width, height)
+  const confidence = found?.confidence ?? FALLBACK_CONFIDENCE
 
   const sourceScaleX = source.width / width
   const sourceScaleY = source.height / height
