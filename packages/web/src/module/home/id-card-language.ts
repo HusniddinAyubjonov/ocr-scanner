@@ -47,6 +47,19 @@ const ENGLISH_LABEL_WORDS = new Set([
   "identity",
   "card",
 ])
+// True for text made only of words from the card's printed English labels
+// ("of", "Place of birth"): a label fragment, never a field's value.
+export const isEnglishLabelText = (text: string): boolean => {
+  const words = text
+    .toLowerCase()
+    .split(/[^a-z']+/)
+    .filter(Boolean)
+    .map((word) => word.replace(/'/g, ""))
+  return (
+    words.length > 0 && words.every((word) => ENGLISH_LABEL_WORDS.has(word))
+  )
+}
+
 const SHORT_WORD_LENGTH = 3
 const MIN_LABEL_CONFIDENCE = 50
 const MIN_SHORT_LABEL_CONFIDENCE = 80
