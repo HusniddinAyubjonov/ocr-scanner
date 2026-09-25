@@ -23,10 +23,6 @@ import type {
   ProcessingImage,
 } from "./scanner.types"
 
-// One model per script. The Tajik model only knows Cyrillic: asked to read
-// Latin text it cannot output a single letter (only digits survive a Latin
-// whitelist), so the MRZ, the Latin name lines and the letter+digit numbers
-// go to the English model, and the Tajik text goes to the Tajik model.
 const TAJIK_LANGUAGES = ["tgk"]
 const ENGLISH_LANGUAGES = ["eng"]
 
@@ -41,8 +37,6 @@ export type IdCardOcrOutput = {
   mrzText: string
   mrzConfidence: number
   fields: Partial<Record<IdCardFieldKey, RecognizedField>>
-  // The three names are resolved across both card sides (Cyrillic on the
-  // front, MRZ on the back), so they travel as evidence rather than fields.
   names: NameEvidence
 }
 
@@ -104,7 +98,9 @@ const withoutNames = (fields: FieldMap): FieldMap => {
   return rest
 }
 
-const onlyNames = (fields: FieldMap): Partial<Record<NameFieldKey, RecognizedField>> => {
+const onlyNames = (
+  fields: FieldMap,
+): Partial<Record<NameFieldKey, RecognizedField>> => {
   const names: Partial<Record<NameFieldKey, RecognizedField>> = {}
   for (const key of NAME_FIELDS) {
     const field = fields[key]
@@ -125,9 +121,6 @@ const imagePixels = async (image: ProcessingImage): Promise<ImageData> => {
   return context.getImageData(0, 0, canvas.width, canvas.height)
 }
 
-// Where to read the MRZ: the block found in the picture itself, then the
-// bottom of the picture as before. Any variant that shows the block will do,
-// since all variants are the same size.
 const mrzAreas = async (
   variants: PreprocessingVariant[],
   fallback: Region,
@@ -154,7 +147,6 @@ export const recognizeIdCard = async ({
 }: RecognizeIdCardOptions): Promise<IdCardOcrOutput> => {
   if (variants.length === 0)
     throw new Error("Нет подготовленных изображений для OCR.")
-  // Both models must load; if one fails, the other must not be left running.
   const created = await Promise.allSettled([
     createWorker(TAJIK_LANGUAGES, OEM.LSTM_ONLY, {
       logger: (message) => {
@@ -166,7 +158,10 @@ export const recognizeIdCard = async ({
     createWorker(ENGLISH_LANGUAGES, OEM.LSTM_ONLY),
   ])
   const [tajikResult, englishResult] = created
-  if (tajikResult.status === "rejected" || englishResult.status === "rejected") {
+  if (
+    tajikResult.status === "rejected" ||
+    englishResult.status === "rejected"
+  ) {
     await Promise.allSettled(
       created.map((result) =>
         result.status === "fulfilled" ? result.value.terminate() : undefined,
@@ -214,9 +209,6 @@ export const recognizeIdCard = async ({
         (variant) => variant.id === bestCandidate.result.variantId,
       ) ?? variants[0]
 
-    // The same image read by the English model: it fixes the English half of
-    // the bilingual labels and supplies the Latin line under each name. Its
-    // boxes line up with the Tajik page's because both read the same pixels.
     if (!shouldContinue()) throw new Error("OCR отменён.")
     onStatus("Распознавание английских подписей", 0)
     await englishWorker.setParameters({
@@ -243,7 +235,6 @@ export const recognizeIdCard = async ({
       bestVariant,
       ...variants.filter((variant) => variant.id !== bestVariant.id),
     ].slice(0, 2)
-    // The front has no MRZ; on the back it is looked for where it really is.
     const areas =
       side === "front"
         ? []
@@ -254,8 +245,6 @@ export const recognizeIdCard = async ({
     let bestMrz: { page: Page; parsed: MrzResult | null } | null = null
     for (const [index, variant] of mrzVariants.entries())
       for (const rectangle of areas) {
-        // The usual bottom area is only a second opinion on one variant when
-        // the block was found directly.
         if (index > 0 && areas.length > 1 && rectangle === areas[1]) continue
         if (!shouldContinue()) throw new Error("OCR отменён.")
         const recognition = await englishWorker.recognize(
@@ -311,10 +300,6 @@ export const recognizeIdCard = async ({
       rawText,
       mrzText: mrzPage?.text.trim() ?? "",
       mrzConfidence: mrzPage?.confidence ?? 0,
-      // Reads of a known place on the card, and the MRZ with its check
-      // digits, are validated; what the page-wide parsers guess is not. So
-      // the guesses only fill what those leave empty, however confident the
-      // guess looks (a stray "of" from a label once beat a real "TJK").
       fields: withoutNames({
         ...mergeRecognizedFields(layoutFields, textFields),
         ...mergeRecognizedFields(zones.fields, mrz?.fields ?? {}),
@@ -328,6 +313,9 @@ export const recognizeIdCard = async ({
       }),
     }
   } finally {
-    await Promise.allSettled([tajikWorker.terminate(), englishWorker.terminate()])
+    await Promise.allSettled([
+      tajikWorker.terminate(),
+      englishWorker.terminate(),
+    ])
   }
 }

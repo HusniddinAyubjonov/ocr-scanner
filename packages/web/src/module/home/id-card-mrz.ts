@@ -8,10 +8,7 @@ export type MrzNames = { surname?: string; givenNames?: string }
 
 export type MrzResult = {
   fields: FieldMap
-  // Latin names from line 3. They are evidence for the Tajik (Cyrillic)
-  // names, never shown as field values themselves.
   names: MrzNames
-  // Check-digit based quality of the read, used to choose between OCR passes.
   score: number
   lines: string[]
 }
@@ -56,8 +53,6 @@ const LETTER_LOOKALIKES: Record<string, string> = {
   "6": "G",
   "8": "B",
 }
-// The only single-character sex misreads worth repairing: M read as N/H and
-// F read as P/E. Everything else stays invalid instead of being guessed.
 const SEX_LOOKALIKES: Record<string, string> = {
   N: "M",
   H: "M",
@@ -82,8 +77,6 @@ const mapRange = (
 const replaceAt = (line: string, index: number, value: string): string =>
   line.slice(0, index) + value + line.slice(index + 1)
 
-// State codes are three letters; the card only ever carries the issuing
-// state, so a one-character misread of it is snapped back.
 const snapState = (code: string): string => {
   const letters = mapRange(code, 0, 2, LETTER_LOOKALIKES)
   const differences = [...EXPECTED_STATE].filter(
@@ -92,8 +85,6 @@ const snapState = (code: string): string => {
   return differences <= 1 ? EXPECTED_STATE : letters
 }
 
-// TD1 line 1: document code (0-1), state (2-4), document number (5-13) and
-// its check digit (14). The number is one letter plus eight digits.
 const repairLine1 = (line: string): string => {
   let repaired = mapRange(line, 6, 14, DIGIT_LOOKALIKES)
   repaired =
@@ -101,8 +92,6 @@ const repairLine1 = (line: string): string => {
   return repaired
 }
 
-// TD1 line 2: birth date (0-5) + check (6), sex (7), expiry (8-13) + check
-// (14), nationality (15-17), optional data, composite check (29).
 const repairLine2 = (line: string): string => {
   let repaired = mapRange(
     mapRange(line, 0, 6, DIGIT_LOOKALIKES),
@@ -120,13 +109,9 @@ const repairLine2 = (line: string): string => {
   return repaired
 }
 
-// "<" filler is what OCR misreads most, usually as one of these letters.
 const FILLER_LOOKALIKES = "KLCESIX"
 const FILLER_RUN = new RegExp(`[${FILLER_LOOKALIKES}<]{4,}$`)
 
-// A separator is often read with a letter wedged between its chevrons
-// ("RUZYEVA<K<MUNISA" for "RUZYEVA<<MUNISA"). A letter with a chevron on both
-// sides is never part of a name.
 const WEDGED_FILLER = new RegExp(`<[${FILLER_LOOKALIKES}]+(?=<)`, "g")
 
 const repairLine3 = (line: string): string => {
@@ -155,9 +140,6 @@ const scoreLine2 = (line: string): number =>
   (/^[A-Z]{3}$/.test(line.slice(15, 18)) ? 1 : 0) +
   (line.slice(15, 18) === EXPECTED_STATE ? 2 : 0)
 
-// OCR drops or adds characters, and a shifted line breaks every field after
-// the shift. Every way of inserting "<" (or deleting a character) up to two
-// edits is tried and the candidate whose check digits pass wins.
 const lengthCandidates = (line: string): string[] => {
   const difference = line.length - MRZ_LINE_LENGTH
   if (difference === 0) return [line]
@@ -221,7 +203,6 @@ const cleanLines = (text: string): string[] => {
     .split("\n")
     .map((line) => line.replace(/[^A-Z0-9<]/g, ""))
     .filter((line) => line.length >= 24)
-  // A block read without line breaks arrives as one 90-character string.
   if (lines.length === 1 && lines[0].length >= 84 && lines[0].length <= 96)
     return [0, 1, 2].map((index) =>
       lines[0].slice(index * MRZ_LINE_LENGTH, (index + 1) * MRZ_LINE_LENGTH),
@@ -291,15 +272,10 @@ export const parseMrzText = (text: string): MrzResult | null => {
   const compositeOk = valid("compositeCheckDigit")
   const checksPassed = [documentOk, birthOk, expiryOk].filter(Boolean).length
   const score = best.score + (compositeOk ? 4 : 0)
-  // One passing check digit is 90% evidence at best (a random misread passes
-  // 1 time in 10), so the check-digit-guarded fields need a second one, or
-  // the composite digit, to agree before they are trusted.
   const datesTrusted = checksPassed >= 2 || compositeOk
   if (checksPassed === 0)
     return { fields: {}, names: {}, score, lines: best.lines }
 
-  // Sex, nationality and names have no check digit of their own, so they
-  // inherit trust from how much of the surrounding lines verified.
   const checked = compositeOk || checksPassed === 3 ? 98 : 92
   const unchecked = compositeOk ? 92 : checksPassed >= 2 ? 82 : 65
   const fields: FieldMap = {}
@@ -323,9 +299,6 @@ export const parseMrzText = (text: string): MrzResult | null => {
   if (mrz.sex === "female") set("sex", "F", unchecked)
   if (/^[A-Z]{3}$/.test(mrz.nationality ?? ""))
     set("citizenship", mrz.nationality, unchecked)
-  // Tajik cards carry the national ID number in the optional data of line 1.
-  // It shares the composite check digit with the rest of the line, and the
-  // document number's own check digit vouches for where the line is aligned.
   if (documentOk || compositeOk) {
     const optional = mapRange(
       best.lines[0].slice(OPTIONAL_START, OPTIONAL_START + NATIONAL_ID_LENGTH),
@@ -345,9 +318,6 @@ export const parseMrzText = (text: string): MrzResult | null => {
   return { fields, names, score, lines: best.lines }
 }
 
-// Where the MRZ lines are on the image, top to bottom, for registering the
-// rest of the card against them. Only lines that look like MRZ lines count;
-// with more than three, the bottom three are the MRZ.
 export const mrzLineBoxes = (page: Page): Bbox[] => {
   const lines = (page.blocks ?? [])
     .flatMap((block) =>

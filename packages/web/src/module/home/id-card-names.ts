@@ -10,16 +10,9 @@ type NameFieldMap = Partial<Record<NameField, RecognizedField>>
 
 export type OcrLine = { text: string; confidence: number; bbox: Bbox }
 
-// Everything one card side tells us about the three names. The card prints
-// each name twice — Tajik Cyrillic, then its Latin transliteration right
-// under it — and the MRZ carries the Latin surname and given names again.
-// The Tajik model reads Cyrillic and the English model reads Latin, so the
-// Latin readings are what proves (and repairs) the Cyrillic ones.
 export type NameEvidence = {
   cyrillic: OcrLine[]
   latin: OcrLine[]
-  // Read directly under each name's own label, so which field it is doesn't
-  // depend on reading order.
   anchored: AnchoredNames
   labeled: NameFieldMap
   mrz: MrzNames
@@ -37,10 +30,6 @@ const LATIN_NAME = /^[A-Z]{2,}(?:[ '-][A-Z]+)*$/
 const LABEL_TEXT =
   /НАСАБ|^НОМ$|НОМИ|ПАДАР|ША[ҲХ]РВАНД|[ҶЧ]ИНС|ТАВАЛЛУД|МА[ҚК]ОМИ|НИШОН|ШИНОСНОМА|РА[ҚК]АМИ|SURNAME|FATHER|NATIONALITY|BIRTH|AUTHORITY|ADDRESS|DOCUMENT|ISSUE|EXPIRY|^NAME$|^SEX$/
 
-// Each model also "reads" the other script, as lookalike letters. On the same
-// physical line the reading in the right language is the far more confident
-// one; a line is dropped as a shadow only when it loses by more than this
-// margin, and lines closer than that are both kept.
 const SHADOW_MARGIN = 8
 const MIN_LATIN_CONFIDENCE = 50
 const MIN_WORD_CONFIDENCE = 25

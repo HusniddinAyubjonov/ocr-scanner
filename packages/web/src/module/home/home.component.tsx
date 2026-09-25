@@ -612,51 +612,54 @@ export const Home = () => {
             {(["front", "back"] as CardSide[]).map((groupSide) => (
               <div key={groupSide}>
                 <h3 className={styles.fieldGroupTitle}>
-                  {groupSide === "front" ? "Лицевая сторона" : "Обратная сторона"}
+                  {groupSide === "front"
+                    ? "Лицевая сторона"
+                    : "Обратная сторона"}
                 </h3>
                 <div className={styles.fieldsBlock}>
-              {ID_CARD_FIELD_LABELS.filter(
-                ({ side }) => side === groupSide,
-              ).map(({ key, label, wide }) => {
-                const metadata = fieldMetadata[key]
-                return (
-                  <label
-                    key={key}
-                    className={wide ? styles.fieldRowWide : styles.fieldRow}
-                  >
-                    <span className={styles.fieldLabelRow}>
-                      <span className={styles.fieldLabel}>{label}</span>
-                      {metadata && (
-                        <span
-                          className={
-                            metadata.confidence >= 70
-                              ? styles.confidenceGood
-                              : styles.confidenceLow
-                          }
-                        >
-                          {metadata.confidence}% · {SOURCE_LABELS[metadata.source]}
+                  {ID_CARD_FIELD_LABELS.filter(
+                    ({ side }) => side === groupSide,
+                  ).map(({ key, label, wide }) => {
+                    const metadata = fieldMetadata[key]
+                    return (
+                      <label
+                        key={key}
+                        className={wide ? styles.fieldRowWide : styles.fieldRow}
+                      >
+                        <span className={styles.fieldLabelRow}>
+                          <span className={styles.fieldLabel}>{label}</span>
+                          {metadata && (
+                            <span
+                              className={
+                                metadata.confidence >= 70
+                                  ? styles.confidenceGood
+                                  : styles.confidenceLow
+                              }
+                            >
+                              {metadata.confidence}% ·{" "}
+                              {SOURCE_LABELS[metadata.source]}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                    <input
-                      value={idCardFields[key]}
-                      placeholder="Не распознано"
-                      onChange={(event) => {
-                        setIdCardFields((current) => ({
-                          ...current,
-                          [key]: event.target.value,
-                        }))
-                        setFieldMetadata((current) => {
-                          const nextMetadata = { ...current }
-                          delete nextMetadata[key]
-                          return nextMetadata
-                        })
-                      }}
-                      className={styles.fieldInput}
-                    />
-                  </label>
-                )
-              })}
+                        <input
+                          value={idCardFields[key]}
+                          placeholder="Не распознано"
+                          onChange={(event) => {
+                            setIdCardFields((current) => ({
+                              ...current,
+                              [key]: event.target.value,
+                            }))
+                            setFieldMetadata((current) => {
+                              const nextMetadata = { ...current }
+                              delete nextMetadata[key]
+                              return nextMetadata
+                            })
+                          }}
+                          className={styles.fieldInput}
+                        />
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
             ))}

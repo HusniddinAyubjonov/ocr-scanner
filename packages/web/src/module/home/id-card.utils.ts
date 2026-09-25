@@ -45,10 +45,6 @@ const SEPARATOR_TRIM = /^[\s:/|.,-]+|[\s:/|.,]+$/g
 const CYRILLIC_CAPS_WORD = /^[А-ЯЁЎҚҒҲҶӢӮ]{2,}$/
 const LATIN_CAPS_WORD = /^[A-Z]{2,}$/
 
-// MRZ text is always plain Latin+digits, but Tesseract sometimes reads a
-// Latin letter as its Cyrillic lookalike (О instead of O, Р instead of P) —
-// visually identical glyphs, wrong Unicode block. Coercing them back is safe
-// specifically for MRZ lines since no genuine Cyrillic ever belongs there.
 const CYRILLIC_TO_LATIN: Record<string, string> = {
   А: "A",
   а: "a",
@@ -81,10 +77,6 @@ const normalizeLookalikes = (value: string): string =>
     (char) => CYRILLIC_TO_LATIN[char] ?? char,
   )
 
-// Document numbers are always "one letter, then only digits" — Tesseract
-// frequently reads a digit 0 as a similar-looking letter (O, D, Q...), so
-// any non-digit after the first character is almost certainly a misread
-// zero, whichever letter it came out as.
 const fixDocumentNumberDigits = (value: string): string => {
   if (value.length < 2) {
     return value
@@ -106,26 +98,16 @@ const fixDocumentNumberDigits = (value: string): string => {
 
   return (
     normalizeLookalikes(value[0]) +
-    value
-      .slice(1)
-      .replace(/[^0-9]/g, (char) => DIGIT_LOOKALIKES[char] ?? "0")
+    value.slice(1).replace(/[^0-9]/g, (char) => DIGIT_LOOKALIKES[char] ?? "0")
   )
 }
 
 const hasEnoughLetters = (text: string): boolean =>
   (text.match(/[A-Za-zА-Яа-яЁёЎўҚқҒғҲҳҶҷӢӣӮӯ]/g) ?? []).length >= 2
 
-// Characters that only ever show up as OCR noise around a label (table
-// borders, stray quote marks) — a genuine value on this card never
-// contains them. A "/" surrounded by whitespace is the leftover of a
-// stripped bilingual label separator; a "/" with no space around it is
-// legitimate inline data (e.g. "МУЧАРРАД/SINGLE"), so only the spaced form
-// counts as noise.
 const HARD_NOISE_CHARACTERS = /[|«»"[\]]/
 const SPACED_SLASH = /\s\/|\/\s/
 
-// Rejects OCR noise (stray separators, near-empty fragments) that would
-// otherwise be mistaken for a genuine field value.
 const looksLikeValue = (text: string): boolean =>
   !HARD_NOISE_CHARACTERS.test(text) &&
   !SPACED_SLASH.test(text) &&
@@ -133,11 +115,6 @@ const looksLikeValue = (text: string): boolean =>
 
 const MAX_INLINE_VALUE_LENGTH = 20
 
-// A label line with unrelated OCR noise stuck to both ends (garbage before
-// the label, garbage after) still leaves a "remainder" once the label text
-// itself is stripped — but a real inline value on this kind of card is
-// always short (a number, a word or two), so a long leftover is noise, not
-// data, and the next line's value should be trusted instead.
 const looksLikeInlineValue = (text: string): boolean =>
   looksLikeValue(text) && text.length <= MAX_INLINE_VALUE_LENGTH
 
@@ -145,17 +122,12 @@ const FIELD_LABELS: Record<
   "fatherName" | "birthPlace" | "documentNumber",
   RegExp[]
 > = {
-  // OCR is inconsistent about the "қ"/"ҳ"/"ӣ" hooks — sometimes keeps them,
-  // sometimes flattens to the plain Cyrillic letter — so both spellings are
-  // accepted throughout.
   fatherName: [/номи\s*па[а-яёa-z]{2,4}/i, /father.?s?\s*name/i],
   birthPlace: [/[чцҷ]ои\s*таваллуд/i, /place\s*of\s*birth/i],
   documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?(no|№)\.?/i],
 }
 
-// OCR sometimes reads the leading "I" of "ID number" as the digit "1".
 const PERSONAL_ID_LABEL = /\b[1i]d\s*number\b/i
-// "Нишонӣ" is the Tajik word some card revisions use instead of "Address".
 const ADDRESS_LABEL = /нишон[иӣ]|\ba?ddress\b/i
 const SURNAME_LABEL = [/насаб/i, /surname/i]
 const GIVEN_NAME_LABEL = [/^ном\//i]
@@ -171,17 +143,11 @@ const isKnownLabelLine = (line: string): boolean =>
     .flat()
     .some((pattern) => pattern.test(line))
 
-// Strip whitespace (OCR sometimes inserts a stray space mid-line) and coerce
-// Cyrillic lookalikes before testing — otherwise a single misread character
-// makes an otherwise-valid MRZ line fail the pattern and get discarded.
 const findMrzLines = (lines: string[]): string[] =>
   lines
     .map((line) => normalizeLookalikes(line.replace(/\s+/g, "")))
     .filter((line) => line.includes("<") && MRZ_LINE_PATTERN.test(line))
 
-// Names on the card are printed in capitals, one script per line. A short
-// or mixed-case/mixed-script string ("wn ич", "BiLshob", "ДЕД") is OCR
-// noise, and showing it as data is worse than leaving the field empty.
 export const isPlausibleName = (value: string): boolean => {
   const name = value.trim()
   if (!/^[\p{Lu}\s'-]{4,}$/u.test(name)) return false
@@ -196,8 +162,6 @@ export const isIdCardText = (text: string): boolean => {
 }
 
 const formatMrzDate = (rawChars: string): string => {
-  // Same O/0 misread as document numbers, just inside a date field where
-  // every character is guaranteed to be a digit.
   const chars = rawChars.replace(/O/gi, "0")
 
   if (!/^\d{6}$/.test(chars)) {
@@ -252,14 +216,31 @@ const parseMrz = (lines: string[]): Partial<IdCardFields> => {
   return fields
 }
 
-// A name is printed twice on the card, in Cyrillic and in Latin, and the two
-// must be the same word. Comparing their consonant skeletons (vowels and
-// transliteration variants — Х/KH/H, Ч/CH/J, Қ/Q/K — differ freely) tells a
-// genuine name from OCR noise that merely looks like capitals.
 const CYRILLIC_SKELETON: Record<string, string> = {
-  Б: "B", В: "V", Г: "G", Ғ: "G", Д: "D", Ж: "J", З: "Z", К: "K", Қ: "K",
-  Л: "L", М: "M", Н: "N", П: "P", Р: "R", С: "S", Т: "T", Ф: "F", Х: "H",
-  Ҳ: "H", Ц: "S", Ч: "J", Ҷ: "J", Ш: "S", Щ: "S",
+  Б: "B",
+  В: "V",
+  Г: "G",
+  Ғ: "G",
+  Д: "D",
+  Ж: "J",
+  З: "Z",
+  К: "K",
+  Қ: "K",
+  Л: "L",
+  М: "M",
+  Н: "N",
+  П: "P",
+  Р: "R",
+  С: "S",
+  Т: "T",
+  Ф: "F",
+  Х: "H",
+  Ҳ: "H",
+  Ц: "S",
+  Ч: "J",
+  Ҷ: "J",
+  Ш: "S",
+  Щ: "S",
 }
 
 const cyrillicSkeleton = (word: string): string =>
@@ -321,15 +302,6 @@ const findNamePairs = (lines: string[]): string[] => {
   return pairs
 }
 
-// The combined "Sex Nationality Date of birth Place of birth" header row
-// contains the English phrase "place of birth" — extractLabeledField must not
-// mistake that header for a dedicated birthPlace label, or it falls through
-// to the header's own value row (sex + birth date) as if it were the value.
-// "Sex" itself sometimes drops out of the header entirely, leaving just
-// "Date of birth Place of birth" on one line — that combination alone is
-// still enough to know it's a header, not a real birthPlace label (matching
-// just "place of birth" there strips only half the header, leaving "Date of
-// birth" behind looking like a value).
 const isBirthRowHeader = (line: string): boolean => {
   const normalized = normalizeLookalikes(line)
   const hasSex = /\bsex\b/i.test(normalized)
@@ -418,8 +390,6 @@ const findCapsWordAfterLabel = (
     const cyrillic = lines[i + 1]?.trim() ?? ""
     const latin = lines[i + 2]?.trim() ?? ""
 
-    // A lone word can't be verified, so only a matching Cyrillic + Latin
-    // pair under the label counts.
     if (
       CYRILLIC_CAPS_WORD.test(cyrillic) &&
       LATIN_CAPS_WORD.test(latin) &&
@@ -433,8 +403,6 @@ const findCapsWordAfterLabel = (
 }
 
 export const extractIdCardFields = (text: string): IdCardFields => {
-  // OCR spaces out dates ("49. 07. 2034") and misreads a leading 0 of the
-  // day as 4-9, so a day above 31 is treated as its 0X form.
   const normalizeDates = (line: string): string =>
     line
       .replace(/(\d{1,2})\s*[.,]\s*(\d{1,2})\s*[.,]\s*(\d{4})/g, "$1.$2.$3")
@@ -461,10 +429,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   fromLabels.surname = findCapsWordAfterLabel(lines, SURNAME_LABEL)
   fromLabels.givenNames = findCapsWordAfterLabel(lines, GIVEN_NAME_LABEL)
 
-  // A card photographed more than once (e.g. both slots caught the front)
-  // repeats the same surname pair later in the text — comparing with "қ"
-  // and "к" treated as the same letter keeps that repeat from being
-  // mistaken for a different name and filling a still-empty field with it.
   const namesLookSame = (a: string, b: string): boolean =>
     a.toLowerCase().replace(/қ/g, "к") === b.toLowerCase().replace(/қ/g, "к")
 
@@ -506,12 +470,8 @@ export const extractIdCardFields = (text: string): IdCardFields => {
   if (validityRow[1]) fromLabels.expiryDate = validityRow[1]
   if (validityRow[2]) fromLabels.nationalIdNumber = validityRow[2]
 
-
   const fromMrz = parseMrz(lines)
 
-  // A falsy value from a later source must never wipe out a good value an
-  // earlier source already found — merge field by field, keeping the first
-  // truthy value in priority order (front labels preferred, MRZ as fallback).
   const fields = { ...EMPTY_ID_CARD_FIELDS }
   for (const source of [fromMrz, fromLabels]) {
     for (const key of Object.keys(source) as (keyof IdCardFields)[]) {
@@ -522,10 +482,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     }
   }
 
-  // A document number is one letter then digits — with digits often read
-  // as lookalike letters (О, З, Ѕ...). A label-derived value that isn't
-  // that shape is a neighbouring garbled line; the real number is usually
-  // a bare line a little further down.
   const DOC_NUMBER_SHAPE = /^[A-ZА-ЯЁ][0-9OОDЗзSЅбВBIlІ]{6,9}$/
   if (fields.documentNumber && !DOC_NUMBER_SHAPE.test(fields.documentNumber)) {
     fields.documentNumber = ""
@@ -537,11 +493,13 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     docNumberRaw = compact.find((line) => DOC_NUMBER_SHAPE.test(line)) ?? ""
   }
 
-  // Numbers are letter + 8 digits; OCR sometimes breaks the tail onto the
-  // next line ("A035799" / "76"), so re-attach it when it fits exactly.
   const DOC_NUMBER_LENGTH = 9
   const docIndex = compact.findIndex((line) => line === docNumberRaw)
-  if (docNumberRaw && docNumberRaw.length < DOC_NUMBER_LENGTH && docIndex >= 0) {
+  if (
+    docNumberRaw &&
+    docNumberRaw.length < DOC_NUMBER_LENGTH &&
+    docIndex >= 0
+  ) {
     const tail = compact[docIndex + 1] ?? ""
     if (
       /^[0-9OОЗ]+$/.test(tail) &&
@@ -565,15 +523,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     }
   }
 
-  // The MRZ line carrying it is sometimes too short/garbled to trust
-  // (parseMrz then skips it entirely) — fall back to the first date found
-  // anywhere in the text that isn't already claimed as the issue/expiry
-  // date. A date sharing its line with "сол" ("year") is the address's
-  // registration date ("... since 10.01.2018, year") printed as a fixed
-  // administrative note, not the birth date, even when nothing else in the
-  // text is a better candidate.
-  // No \b here: JS regex word boundaries only recognize ASCII word
-  // characters, so \b around Cyrillic text silently never matches.
   const REGISTRATION_DATE_MARKER = /сол/i
 
   if (!fields.birthDate) {
@@ -596,10 +545,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     }
   }
 
-  // When the "Sex ... Date of birth" header itself is too garbled to match,
-  // the sex marker still often survives right next to a date on the same
-  // value row (e.g. "MM TYKTJK 29.07.2001") — OCR sometimes doubles the
-  // letter, and may read it as the Cyrillic М lookalike.
   if (!fields.sex) {
     const rowWithSex = lines
       .map((line) => normalizeLookalikes(line))
@@ -610,9 +555,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     }
   }
 
-  // Same idea for the issue/expiry row: when its header is too garbled to
-  // recognize, a line carrying two dates back to back is almost certainly
-  // that row printed as "issue expiry [national id]".
   if (!fields.issueDate || !fields.expiryDate) {
     const datesInLine = new RegExp(DATE_PATTERN.source, "g")
 
@@ -626,16 +568,15 @@ export const extractIdCardFields = (text: string): IdCardFields => {
       }
     }
 
-    // Dates on separate lines: whatever dates remain after the birth date
-    // (and address registration dates) are issue (earliest) and expiry
-    // (latest).
     if (!fields.issueDate || !fields.expiryDate) {
       const year = (date: string): number => Number(date.slice(-4))
       const remaining = [
         ...new Set(
           lines
             .filter((line) => !/сол/i.test(line))
-            .flatMap((line) => line.match(new RegExp(DATE_PATTERN.source, "g")) ?? []),
+            .flatMap(
+              (line) => line.match(new RegExp(DATE_PATTERN.source, "g")) ?? [],
+            ),
         ),
       ]
         .filter((date) => date !== fields.birthDate && year(date) > 2000)
@@ -643,7 +584,8 @@ export const extractIdCardFields = (text: string): IdCardFields => {
 
       if (remaining.length >= 2) {
         if (!fields.issueDate) fields.issueDate = remaining[0]
-        if (!fields.expiryDate) fields.expiryDate = remaining[remaining.length - 1]
+        if (!fields.expiryDate)
+          fields.expiryDate = remaining[remaining.length - 1]
       }
     }
   }

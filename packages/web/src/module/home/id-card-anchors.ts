@@ -1,20 +1,5 @@
 import type { Bbox, Page } from "tesseract.js"
 
-// The front of a Tajikistan ID card is a fixed template: every value is
-// printed directly under its bilingual label. A page-wide OCR pass reads the
-// labels well but drops or garbles values (a whole name line can go missing),
-// so the labels are used as anchors and the small area under each one is read
-// again on its own with a character set restricted to what that value can be.
-//
-// Positions below were measured on a real card whose corners were placed on
-// its edges and corrected to 1800x1234. Labels found on a new image are only
-// used to register it against that template: one scale and one shift per
-// axis, fitted robustly (a label whose box was merged with its neighbour or
-// split in two simply doesn't agree with the rest and is outvoted). Every
-// value's zone then follows from the fit, even when its own label was not
-// read, and a card that is cut off by the frame, or photographed closer or
-// further away, still lines up.
-
 type Box = [number, number, number, number]
 type Point = [number, number]
 
@@ -36,11 +21,8 @@ export type AnchorField =
   | "bloodGroup"
   | "taxId"
 
-// A name is printed twice (Cyrillic, then Latin below it), so it has two
-// zones; every other value has one.
 export type ZonePart = "cyrillic" | "latin" | "value"
 
-// `line` numbers the lines of a value that wraps (the address).
 export type Zone = {
   field: AnchorField
   part: ZonePart
@@ -52,8 +34,6 @@ export type Segment = { text: string; confidence: number; bbox: Bbox }
 
 type Source = "tajik" | "english"
 
-// A label as read by one model, and where its top-left corner sits on the
-// template.
 type Anchor = { source: Source; test: (text: string) => boolean; point: Point }
 
 const tajik =
@@ -96,7 +76,6 @@ const ANCHORS: Anchor[] = [
   { source: "english", test: english(/document/i), point: [402, 1067] },
 ]
 
-// Where each value is printed, with a little margin, on the same template.
 const VALUES: { field: AnchorField; part: ZonePart; box: Box }[] = [
   { field: "surname", part: "cyrillic", box: [655, 333, 1120, 391] },
   { field: "surname", part: "latin", box: [655, 384, 1120, 440] },
@@ -114,8 +93,6 @@ const VALUES: { field: AnchorField; part: ZonePart; box: Box }[] = [
   { field: "documentNumber", part: "value", box: [80, 1100, 500, 1165] },
 ]
 
-// Words of one label ("Санаи таваллуд/") sit close together; two labels in a
-// row (the "Ҷинс/  Шаҳрвандӣ/" line) are separated by a much wider gap.
 const SEGMENT_GAP = 1
 const MIN_WORD_CONFIDENCE = 30
 
@@ -165,14 +142,10 @@ type AxisFit = { scale: number; shift: number }
 
 const MIN_SCALE = 0.3
 const MAX_SCALE = 4
-// How far, on the template, a label may sit from where the fit says it should
-// be and still count as agreeing with it.
 const INLIER_TOLERANCE = 16
-// Two labels closer than this along an axis can't tell scale from shift.
 const MIN_SPREAD = 100
 const MIN_INLIERS = 3
 
-// Least-squares scale and shift over the labels that agree with the fit.
 const refit = (pairs: Point[]): AxisFit => {
   const n = pairs.length
   const meanTemplate = pairs.reduce((sum, [template]) => sum + template, 0) / n
@@ -187,8 +160,6 @@ const refit = (pairs: Point[]): AxisFit => {
   return { scale, shift: meanActual - scale * meanTemplate }
 }
 
-// Every pair of labels proposes a scale and shift; the proposal most other
-// labels agree with wins. Wrongly grouped or misread labels are outliers.
 const fitAxis = (pairs: Point[]): AxisFit | null => {
   let best: { pairs: Point[]; error: number } | null = null
   for (let first = 0; first < pairs.length; first += 1)

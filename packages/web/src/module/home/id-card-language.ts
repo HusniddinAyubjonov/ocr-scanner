@@ -1,13 +1,5 @@
 import type { Line, Page, Word } from "tesseract.js"
 
-// Every label on the card is printed twice, "Нишонӣ / Address". The Tajik
-// model reads the English half as Cyrillic lookalikes and is often confident
-// about it ("Name" comes out as "Нате" at 92%), so confidence alone can't
-// tell which model to trust. The English labels are a small fixed vocabulary
-// though, and the English model reads them exactly, while it never reads a
-// genuine Tajik word as one of them. Where it does, the English word replaces
-// the garbled one, so the label parsers see clean labels in both languages
-// and no leftover garbage that could pass for a field value.
 const ENGLISH_LABEL_WORDS = new Set([
   "surname",
   "given",
@@ -47,8 +39,6 @@ const ENGLISH_LABEL_WORDS = new Set([
   "identity",
   "card",
 ])
-// True for text made only of words from the card's printed English labels
-// ("of", "Place of birth"): a label fragment, never a field's value.
 export const isEnglishLabelText = (text: string): boolean => {
   const words = text
     .toLowerCase()
@@ -108,7 +98,6 @@ export const mergeEnglishLabels = (tajik: Page, english: Page): Page => {
         words.push(word)
         continue
       }
-      // A garbled word can be split in two; the English word goes in once.
       if (placed.has(label)) continue
       placed.add(label)
       words.push({ ...word, text: label.text, confidence: label.confidence })

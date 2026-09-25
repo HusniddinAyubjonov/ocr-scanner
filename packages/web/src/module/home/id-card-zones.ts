@@ -88,8 +88,6 @@ const kindOf = (field: AnchorField, part: ZonePart): ZoneKind => {
   }
 }
 
-// A wide zone can pick up a stray mark past the end of the name, which OCR
-// turns into a one-letter word; punctuation at either end is noise too.
 const cleanName = (value: string): string => {
   const words = value
     .replace(/^[^\p{L}]+|[^\p{L}]+$/gu, "")
@@ -101,9 +99,6 @@ const cleanName = (value: string): string => {
 
 const STATE = "TJK"
 
-// Parses one raw read into the field's value, or null when it can't be a
-// valid value for that field. Cheap, deterministic and independent of OCR,
-// so it is what decides whether a read is kept.
 export const parseZoneRead = (
   field: AnchorField,
   part: ZonePart,
@@ -123,15 +118,11 @@ export const parseZoneRead = (
       return LATIN_NAME.test(name) ? name : null
     }
     case "sex": {
-      // Printed "З/F" or "М/M": Tajik letter, slash, Latin letter.
       const match = text.replace(/\s+/g, "").match(/([MF])$/)
       return match ? match[1] : null
     }
     case "state": {
-      // "ТҶК/TJK": only the Latin half is readable by the English model, and
-      // its J is often read as I or lost, so a read one character off snaps.
       const letters = text.replace(/[^A-Z/]/g, "")
-      // Without the slash read, the Latin half is the last three letters.
       const latin = letters.includes("/")
         ? (letters.split("/").pop() ?? "")
         : letters.slice(-STATE.length)
@@ -197,11 +188,7 @@ export const cropRect = (
   return canvas
 }
 
-// Bbox of the whole zone stands in for the line's box, so anything found on
-// the page pass in the same place can be recognised as the same line.
 const ZONE_CONFIDENCE_FLOOR = 60
-// Shape alone (13 digits, a letter and eight digits) is strong evidence, and
-// these crops read with lower confidence than dates do.
 const SHAPED_CONFIDENCE_FLOOR = 40
 const confidenceFloor = (kind: ZoneKind): number =>
   kind === "digits13" || kind === "documentNumber"
@@ -216,8 +203,6 @@ const isNameField = (field: AnchorField): field is NameField =>
 
 const groupKey = (zone: Zone): string => `${zone.field}:${zone.part}`
 
-// The Tajik and the English label of one value usually place the same
-// rectangle; reading it twice would only cost time.
 const DUPLICATE_TOLERANCE = 8
 
 const isDuplicate = (first: Bbox, second: Bbox): boolean =>
@@ -226,8 +211,6 @@ const isDuplicate = (first: Bbox, second: Bbox): boolean =>
   Math.abs(first.x1 - second.x1) <= DUPLICATE_TOLERANCE &&
   Math.abs(first.y1 - second.y1) <= DUPLICATE_TOLERANCE
 
-// Values validated by shape alone (a sex letter, the state code) carry no
-// useful OCR confidence, so they get a fixed one.
 const VALIDATED_CONFIDENCE = 85
 
 const confidenceFor = (kind: ZoneKind, ocrConfidence: number): number =>
@@ -235,10 +218,6 @@ const confidenceFor = (kind: ZoneKind, ocrConfidence: number): number =>
     ? VALIDATED_CONFIDENCE
     : Math.min(97, Math.max(86, Math.round(ocrConfidence)))
 
-// Digits are what OCR gets wrong quietly (3 for 5, a dropped 1), and a wrong
-// digit still passes every shape check. Numbers and dates are therefore read
-// from several crops; a value seen twice wins outright, otherwise the most
-// confident read does.
 export type Votes = Map<string, { count: number; confidence: number }>
 
 export const addVote = (
@@ -306,8 +285,6 @@ const readAnchoredZones = async (
         const value = parseZoneRead(field, part, data.text)
         if (!value) continue
         if (isNameField(field)) {
-          // Names are judged later by comparing the Cyrillic and Latin reads,
-          // so a second, different read is worth having.
           if (!nameReads.some((read) => read.text === value))
             nameReads.push({
               text: value,
@@ -318,7 +295,6 @@ const readAnchoredZones = async (
           continue
         }
         if (!isVoted(kind)) {
-          // A sex letter or the state code: the shape alone settles it.
           readings.fields[field as IdCardFieldKey] = {
             value,
             confidence: VALIDATED_CONFIDENCE,
@@ -330,8 +306,6 @@ const readAnchoredZones = async (
         if (agreedVotes(votes)) break search
       }
     }
-    // Two crops agreeing on a value of the right shape is accepted whatever
-    // the engine reports; a single read must clear the confidence floor.
     const chosen = winner(votes)
     if (
       chosen &&
@@ -351,8 +325,6 @@ const readAnchoredZones = async (
   return readings
 }
 
-// Fallback for a card whose labels weren't found: fixed rectangles as
-// fractions of a corrected image that is exactly the card.
 type FixedZone = {
   key: AnchorField
   x: number
@@ -390,8 +362,6 @@ const readFixedZones = async (
       x1: (zone.x + zone.w) * bitmap.width,
       y1: (zone.y + zone.h) * bitmap.height,
     }
-    // A first read of the exact rectangle, then two with extra margin in
-    // case the card was corrected a little off its true edges.
     const votes: Votes = new Map()
     for (const padding of [0.1, 0.35, 0.7]) {
       const { data } = await worker.recognize(cropRect(bitmap, rect, padding))

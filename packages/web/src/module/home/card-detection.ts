@@ -1,12 +1,5 @@
 import type { DocumentCorners, Point } from "./scanner.types"
 
-// Finds a card or sheet lying on a differently coloured surface by colour
-// alone: a document is bright and pale, a table is darker or more saturated.
-// Pixels are split in two by that, the regions are labelled, and the one that
-// is a large convex quadrilateral is the document. Its four corners are the
-// extreme points along the two diagonals, so a document that runs off the
-// edge of the frame gets corners on the frame edge instead of being clipped.
-
 export type CardDetection = { corners: DocumentCorners; confidence: number }
 
 const SATURATION_WEIGHT = 0.5
@@ -15,8 +8,6 @@ const MAX_AREA_RATIO = 0.9
 const MIN_RECTANGULARITY = 0.85
 const MIN_SIDE_RATIO = 0.15
 
-// Brightness minus colourfulness: high for paper, plastic and white cards,
-// low for wood, cloth and shadow.
 const paleness = (pixels: Uint8ClampedArray): Float32Array => {
   const values = new Float32Array(pixels.length / 4)
   for (let index = 0; index < values.length; index += 1) {
@@ -116,8 +107,6 @@ type Region = {
   bottomLeft: Point
 }
 
-// Labels 4-connected regions of set pixels; keeps only what is needed to
-// judge each one: its area, its boundary pixels and its four extreme points.
 const findRegions = (
   mask: Uint8Array,
   width: number,
@@ -249,14 +238,6 @@ const bestCandidate = (
   return best?.candidate ?? null
 }
 
-// A colour threshold can merge the document with a bright patch of the
-// surface (a glare on a table), and at that threshold the outline is wrong.
-// The document's own outline is the one that stays put as the threshold moves
-// through a range, so several thresholds are tried and the longest run of
-// agreeing outlines wins.
-// The region's edge sits where the colour crosses the threshold, which on a
-// card with a shaded rim is a little inside the card. Every edge is moved
-// outward by this share of the image and adjacent edges re-intersected.
 const OUTWARD_OFFSET = 0.012
 
 const THRESHOLD_STEP = 0.05
@@ -275,7 +256,6 @@ const expandQuad = (
     x: corners.reduce((sum, point) => sum + point.x, 0) / corners.length,
     y: corners.reduce((sum, point) => sum + point.y, 0) / corners.length,
   }
-  // Each edge as a line n·p = c, with n pointing away from the centre.
   const lines = corners.map((start, index) => {
     const end = corners[(index + 1) % corners.length]
     const length = Math.max(1e-6, distance(start, end))
@@ -361,7 +341,6 @@ export const detectCardQuad = (
   )
   return {
     corners: { topLeft, topRight, bottomRight, bottomLeft },
-    // 0.55 is where the app stops asking the user to double-check.
     confidence: Math.min(
       1,
       0.55 +

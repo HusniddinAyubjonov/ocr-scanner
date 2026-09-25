@@ -1,10 +1,3 @@
-// Finds the MRZ on a picture of the back of a card without reading any text.
-// The MRZ is unlike everything else printed there: three lines of the same
-// height, evenly spaced, of the same width, in a monospaced face, at the
-// bottom. Reading it works far better on a crop of just those lines than on
-// a wide crop with card edges and empty background in it, so the crop has to
-// be found first.
-
 export type Region = {
   left: number
   top: number
@@ -15,8 +8,6 @@ export type Region = {
 const ANALYSIS_WIDTH = 900
 const MIN_BAND_HEIGHT = 5
 const BAND_GAP = 2
-// Rows of text have many ink/paper changes along them; card edges and empty
-// paper do not.
 const MIN_TRANSITIONS = 24
 const EDGE_COLUMN_FILL = 0.85
 const MAX_HEIGHT_DIFFERENCE = 0.4
@@ -25,16 +16,10 @@ const MIN_OVERLAP = 0.7
 const MIN_WIDTH_SHARE = 0.25
 const PADDING_HEIGHTS = 0.7
 const SIDE_PADDING_HEIGHTS = 1
-// The corrected picture has a dark line along its border; a crop that
-// includes it reads as nonsense.
 const BORDER_MARGIN = 0.01
 
 type Band = { top: number; bottom: number; left: number; right: number }
 
-// A pixel is ink when it is clearly darker than its surroundings. A single
-// global threshold fails on a card photographed on a white sheet (white
-// margin, grey card, black text are three tones); this doesn't care what the
-// background is.
 const LOCAL_RADIUS = 14
 const LOCAL_CONTRAST = 18
 
@@ -69,7 +54,6 @@ const localMeans = (
   return means
 }
 
-// Ink (1) and paper (0) at analysis size.
 const binarize = (
   pixels: Uint8ClampedArray,
   width: number,
@@ -97,7 +81,6 @@ const binarize = (
   return { ink, width: outWidth, height: outHeight }
 }
 
-// Rows that read like a line of text, grouped into bands.
 const findBands = (ink: Uint8Array, width: number, height: number): Band[] => {
   const textRow = new Uint8Array(height)
   for (let y = 0; y < height; y += 1) {
@@ -131,8 +114,6 @@ const findBands = (ink: Uint8Array, width: number, height: number): Band[] => {
     for (let x = 0; x < width; x += 1) {
       let dark = 0
       for (let y = top; y <= bottom; y += 1) dark += ink[y * width + x]
-      // Glyph columns are partly ink; a column that is ink throughout is a
-      // card edge or a rule, not text.
       if (dark > 0 && dark / bandHeight < EDGE_COLUMN_FILL) {
         if (x < left) left = x
         if (x > right) right = x
@@ -170,7 +151,6 @@ const isMrzTriple = (bands: Band[], width: number): boolean => {
   return spanned >= width * MIN_WIDTH_SHARE
 }
 
-// The lowest group of three such lines is the MRZ.
 export const locateMrz = (
   pixels: Uint8ClampedArray,
   width: number,
@@ -208,7 +188,6 @@ export const locateMrz = (
   return null
 }
 
-// The usual place for the MRZ: the bottom of a card that fills the picture.
 const BOTTOM_SHARE = 0.45
 
 export const bottomRegion = (width: number, height: number): Region => {

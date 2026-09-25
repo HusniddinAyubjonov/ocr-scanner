@@ -1,21 +1,10 @@
 import type { Bbox } from "tesseract.js"
 import type { ImageSize, Zone } from "./id-card-anchors"
 
-// The back of the card has no labels the OCR reads reliably (they are tiny
-// and italic), but it has the MRZ: crisp, standardised and always in the same
-// place. The MRZ lines are the anchor: their width gives the horizontal scale
-// and their spacing the vertical one, and everything printed above them
-// follows from the template.
-//
-// Positions were measured on a real card back photographed, corrected and
-// enlarged to 1800x1206.
-
 type Box = [number, number, number, number]
 
 const TEMPLATE = { width: 1800, height: 1206 }
 
-// Where the three MRZ lines sit on the template: the horizontal extent of the
-// 30 characters, and the vertical centre of each line.
 const MRZ = { left: 96, right: 1697, centres: [825.5, 911, 1000.5] }
 
 const ADDRESS_LEFT = 560
@@ -37,7 +26,6 @@ type Transform = { sx: number; tx: number; sy: number; ty: number }
 
 const MIN_SCALE = 0.3
 const MAX_SCALE = 4
-// The two axes may differ a little (corners placed by hand), not wildly.
 const MAX_ASPECT_DRIFT = 1.25
 
 const median = (values: number[]): number => {
@@ -45,8 +33,6 @@ const median = (values: number[]): number => {
   return sorted[Math.floor(sorted.length / 2)]
 }
 
-// Without MRZ lines to anchor on, the corrected image is taken to be the
-// card itself.
 const bySize = (image: ImageSize): Transform => ({
   sx: image.width / TEMPLATE.width,
   tx: 0,

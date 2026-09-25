@@ -3,12 +3,18 @@ import type { Page } from "tesseract.js"
 const MIN_WORD_CONFIDENCE = 25
 
 export const cleanupRecognizedText = (text: string): string =>
-  text.replace(/\r/g, "").split("\n")
+  text
+    .replace(/\r/g, "")
+    .split("\n")
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
-    .filter((line, index, lines) => line.length > 0 || Boolean(lines[index - 1]?.length))
+    .filter(
+      (line, index, lines) =>
+        line.length > 0 || Boolean(lines[index - 1]?.length),
+    )
     .join("\n")
     .replace(/([^.!?:;\n])\n(?=[a-zа-яёӣӯқғҳҷ])/g, "$1 ")
-    .replace(/\n{3,}/g, "\n\n").trim()
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 
 export const extractCleanText = (page: Page): string => {
   if (!page.blocks) {

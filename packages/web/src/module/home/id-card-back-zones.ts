@@ -17,9 +17,6 @@ const PUNCTUATION = " ,.-/\\'()№"
 
 const CYRILLIC_TEXT = CYRILLIC_LETTERS + DIGITS + PUNCTUATION
 
-// What each read may contain. Restricting the character set is what keeps
-// the model from turning a Cyrillic word into Latin lookalikes or the other
-// way round.
 const WHITELIST = {
   text: CYRILLIC_TEXT,
   maritalCyrillic: `${CYRILLIC_LETTERS}/`,
@@ -43,8 +40,6 @@ const cleanText = (raw: string, allowed: string): string =>
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/gu, "")
     .trim()
 
-// Parses one raw read of a back-side zone into the field's value, or null
-// when it can't be one. Independent of OCR, so it decides what is kept.
 export const parseBackRead = (
   field: AnchorField,
   part: ZonePart,
@@ -58,7 +53,6 @@ export const parseBackRead = (
       return letters >= (field === "address" ? 3 : 6) ? text : null
     }
     case "maritalStatus": {
-      // Printed "МУҶАРРАД/SINGLE": the Tajik word, a slash, the English one.
       if (part === "cyrillic") {
         const word = onlyFrom(
           raw.normalize("NFC").toUpperCase().split("/")[0],
@@ -66,8 +60,6 @@ export const parseBackRead = (
         )
         return word.length >= 4 ? word : null
       }
-      // The slash is sometimes lost, so the English word is whatever the
-      // read ends with.
       const word = onlyFrom(
         (raw.toUpperCase().split("/").pop() ?? "").trim(),
         LATIN_LETTERS,
@@ -100,9 +92,6 @@ const ADDRESS_LINE_FLOOR = 40
 const AUTHORITY_FLOOR = 50
 const SHAPED_FLOOR = 40
 const PADDINGS = [0, 0.12, 0.3]
-// A line of text is read at a few margins and the most confident read kept: a
-// little extra margin often fixes a letter the tight crop got wrong. A read
-// this confident ends the search early.
 const TEXT_PADDINGS = [0.12, 0, 0.3]
 const CONFIDENT_TEXT_READ = 92
 const clamp = (value: number, min: number, max: number): number =>
@@ -117,8 +106,6 @@ const setup = (worker: Worker, whitelist: string) =>
 
 type Read = { value: string; confidence: number }
 
-// First read of a zone, at increasing margins, that parses and is confident
-// enough.
 const readZone = async (
   bitmap: ImageBitmap,
   worker: Worker,
@@ -156,8 +143,6 @@ const readBestText = async (
   return best
 }
 
-// Digits and shaped values are read from several crops and voted on, since a
-// wrong character still passes the shape check.
 const readVoted = async (
   bitmap: ImageBitmap,
   worker: Worker,
@@ -173,9 +158,6 @@ const readVoted = async (
     addVote(votes, value, data.confidence)
     if (agreedVotes(votes)) break
   }
-  // The engine's own confidence is unreliable on short digit strings (it can
-  // report 0 for a correct read), so two crops agreeing on a value of the
-  // right shape is accepted as it is; a single read must be confident.
   const chosen = winner(votes)
   return chosen && (chosen.count >= 2 || chosen.confidence >= SHAPED_FLOOR)
     ? { value: chosen.value, confidence: chosen.confidence }
@@ -206,8 +188,6 @@ export const recognizeBackZones = async (input: {
     const fields: FieldMap = {}
     const { tajikWorker, englishWorker, shouldContinue } = input
 
-    // The address wraps onto as many lines as it needs: read line by line
-    // until one doesn't hold text.
     await setup(tajikWorker, WHITELIST.text)
     const addressLines: Read[] = []
     for (const zone of zones
@@ -249,8 +229,6 @@ export const recognizeBackZones = async (input: {
         )
     }
 
-    // Marital status: the Tajik word is the value; the English word beside it
-    // (one of four) confirms that a status was read at all.
     const maritalCyrillic = zoneFor("maritalStatus", "cyrillic")
     const maritalLatin = zoneFor("maritalStatus", "latin")
     if (maritalCyrillic && maritalLatin && shouldContinue()) {
