@@ -6,7 +6,6 @@ export type IdCardFields = {
   birthDate: string
   birthPlace: string
   citizenship: string
-  personalIdNumber: string
   documentNumber: string
   nationalIdNumber: string
   issueDate: string
@@ -21,7 +20,6 @@ export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
   birthDate: "",
   birthPlace: "",
   citizenship: "",
-  personalIdNumber: "",
   documentNumber: "",
   nationalIdNumber: "",
   issueDate: "",
@@ -424,18 +422,6 @@ const findCapsWordAfterLabel = (
   return ""
 }
 
-const extractPersonalIdNumber = (lines: string[]): string => {
-  const labelIndex = lines.findIndex((line) => PERSONAL_ID_LABEL.test(line))
-
-  if (labelIndex === -1) {
-    return ""
-  }
-
-  const next = lines[labelIndex + 1]?.trim()
-
-  return next && /^\d{6,12}$/.test(next) ? next : ""
-}
-
 export const extractIdCardFields = (text: string): IdCardFields => {
   // OCR spaces out dates ("49. 07. 2034") and misreads a leading 0 of the
   // day as 4-9, so a day above 31 is treated as its 0X form.
@@ -460,7 +446,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
       skipIf: isBirthRowHeader,
     }),
     documentNumber: extractLabeledField(lines, FIELD_LABELS.documentNumber),
-    personalIdNumber: extractPersonalIdNumber(lines),
   }
 
   fromLabels.surname = findCapsWordAfterLabel(lines, SURNAME_LABEL)

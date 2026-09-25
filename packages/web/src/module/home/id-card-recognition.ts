@@ -131,11 +131,6 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
     validate: validateDocumentNumber,
   },
   {
-    key: "personalIdNumber",
-    labels: [/\bid number\b/i],
-    validate: validateDigits,
-  },
-  {
     key: "nationalIdNumber",
     labels: [/national id/i, /ра[қк]ами ягона/i],
     validate: validateDigits,

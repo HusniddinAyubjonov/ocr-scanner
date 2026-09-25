@@ -34,7 +34,6 @@ const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
   { key: "birthDate", label: "Дата рождения" },
   { key: "birthPlace", label: "Место рождения" },
   { key: "citizenship", label: "Гражданство" },
-  { key: "personalIdNumber", label: "ID номер" },
   { key: "documentNumber", label: "Номер документа" },
   { key: "nationalIdNumber", label: "Единый национальный ID" },
   { key: "issueDate", label: "Дата выдачи" },
