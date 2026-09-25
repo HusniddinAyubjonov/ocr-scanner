@@ -18,6 +18,8 @@ import {
 import { EMPTY_ID_CARD_FIELDS } from "./id-card.utils"
 import type { IdCardFields } from "./id-card.utils"
 import { recognizeIdCard } from "./id-card-ocr"
+import { resolveNames } from "./id-card-names"
+import type { NameEvidence } from "./id-card-names"
 import { mergeRecognizedFields } from "./id-card-recognition"
 import type { IdCardFieldKey, RecognizedField } from "./id-card-recognition"
 import { INITIAL_SCANNER_STATE } from "./scanner.types"
@@ -43,6 +45,12 @@ const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
   { key: "bloodGroup", label: "Группа крови" },
 ]
 
+const SOURCE_LABELS: Record<RecognizedField["source"], string> = {
+  mrz: "MRZ",
+  verified: "сверено с латиницей",
+  layout: "layout",
+}
+
 type CardSide = "front" | "back"
 type SideRecognition = {
   rawText: string
@@ -50,6 +58,7 @@ type SideRecognition = {
   mrzConfidence: number
   pageConfidence: number
   fields: Partial<Record<IdCardFieldKey, RecognizedField>>
+  names: NameEvidence
 }
 const EMPTY_SIDE_RESULTS: Record<CardSide, SideRecognition | null> = {
   front: null,
@@ -286,14 +295,21 @@ export const Home = () => {
         mrzConfidence: ocrOutput.mrzConfidence,
         pageConfidence: ocrOutput.ocrResult.confidence,
         fields: ocrOutput.fields,
+        names: ocrOutput.names,
       }
       const nextSideResults = {
         ...sideResults,
         [activeSide]: currentSideResult,
       }
+      // Names are settled across both sides: the Cyrillic lines are on the
+      // front and the MRZ that proves them is on the back.
+      const nameEvidence = [nextSideResults.front, nextSideResults.back]
+        .filter((result): result is SideRecognition => result !== null)
+        .map((result) => result.names)
       const mergedFields = mergeRecognizedFields(
         nextSideResults.front?.fields ?? {},
         nextSideResults.back?.fields ?? {},
+        resolveNames(nameEvidence),
       )
       setSideResults(nextSideResults)
       setFieldMetadata(mergedFields)
@@ -606,8 +622,7 @@ export const Home = () => {
                               : styles.confidenceLow
                           }
                         >
-                          {metadata.confidence}% ·{" "}
-                          {metadata.source === "mrz" ? "MRZ" : "layout"}
+                          {metadata.confidence}% · {SOURCE_LABELS[metadata.source]}
                         </span>
                       )}
                     </span>
