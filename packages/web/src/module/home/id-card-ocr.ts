@@ -3,7 +3,8 @@ import type { Page } from "tesseract.js"
 import { extractCleanText } from "./home.utils"
 import { extractIdCardFields, isPlausibleName } from "./id-card.utils"
 import { mergeEnglishLabels } from "./id-card-language"
-import { parseMrzText } from "./id-card-mrz"
+import { recognizeBackZones } from "./id-card-back-zones"
+import { mrzLineBoxes, parseMrzText } from "./id-card-mrz"
 import type { MrzResult } from "./id-card-mrz"
 import { buildNameEvidence, NAME_FIELDS, toOcrLines } from "./id-card-names"
 import type { NameEvidence } from "./id-card-names"
@@ -233,6 +234,21 @@ export const recognizeIdCard = async ({
     const rawText = extractCleanText(tajikPage)
 
     let zones: ZoneReadings = { fields: {}, names: {} }
+    if (side === "back") {
+      onStatus("Распознавание полей обратной стороны", 0)
+      const zoneVariant =
+        variants.find((variant) => variant.id === "contrast") ?? bestVariant
+      zones = {
+        fields: await recognizeBackZones({
+          tajikWorker,
+          englishWorker,
+          image: zoneVariant.image,
+          mrzLines: mrzPage ? mrzLineBoxes(mrzPage) : [],
+          shouldContinue,
+        }),
+        names: {},
+      }
+    }
     if (side === "front") {
       onStatus("Распознавание полей по зонам", 0)
       const zoneVariant =

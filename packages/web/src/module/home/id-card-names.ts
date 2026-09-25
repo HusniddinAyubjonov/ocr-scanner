@@ -470,6 +470,8 @@ const anchoredPair = (entry: {
 // reasonably sure of it; a zone that landed on the wrong place reads as
 // low-confidence noise.
 const MIN_UNCONFIRMED_CONFIDENCE = 60
+// Below any Cyrillic reading, so a front scan always wins over this.
+const MRZ_ONLY_CONFIDENCE = 58
 const MRZ_MATCH_RATIO = 0.3
 const UNVERIFIED_MRZ_MATCH_RATIO = 0.2
 const LABEL_ONLY_CEILING = 55
@@ -624,6 +626,17 @@ export const resolveNames = (sides: NameEvidence[]): NameFieldMap => {
       continue
     }
     const labeled = labeledField(field, sides)
+    // With no Cyrillic reading at all (only the back was scanned) the MRZ
+    // still knows the surname and given names, in Latin.
+    if (!labeled && (field === "surname" || field === "givenNames")) {
+      const latin = anchors[field]
+      if (latin)
+        result[field] = {
+          value: latin,
+          confidence: MRZ_ONLY_CONFIDENCE,
+          source: "mrz",
+        }
+    }
     if (labeled)
       result[field] = {
         ...labeled,

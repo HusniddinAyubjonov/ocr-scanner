@@ -26,18 +26,30 @@ import { INITIAL_SCANNER_STATE } from "./scanner.types"
 import type { ProcessingImage, ScannerState } from "./scanner.types"
 import styles from "./home.module.css"
 
-const ID_CARD_FIELD_LABELS: { key: keyof IdCardFields; label: string }[] = [
-  { key: "surname", label: "Фамилия" },
-  { key: "givenNames", label: "Имя" },
-  { key: "fatherName", label: "Имя отца" },
-  { key: "sex", label: "Пол" },
-  { key: "birthDate", label: "Дата рождения" },
-  { key: "birthPlace", label: "Место рождения" },
-  { key: "citizenship", label: "Гражданство" },
-  { key: "documentNumber", label: "Номер документа" },
-  { key: "nationalIdNumber", label: "Единый национальный ID" },
-  { key: "issueDate", label: "Дата выдачи" },
-  { key: "expiryDate", label: "Срок действия" },
+// Fields printed on the back of the card only show once a back has been
+// scanned; the front ones are also filled from the MRZ on the back.
+const ID_CARD_FIELD_LABELS: {
+  key: keyof IdCardFields
+  label: string
+  side: CardSide
+  wide?: boolean
+}[] = [
+  { key: "surname", label: "Фамилия", side: "front" },
+  { key: "givenNames", label: "Имя", side: "front" },
+  { key: "fatherName", label: "Имя отца", side: "front" },
+  { key: "sex", label: "Пол", side: "front" },
+  { key: "birthDate", label: "Дата рождения", side: "front" },
+  { key: "birthPlace", label: "Место рождения", side: "front" },
+  { key: "citizenship", label: "Гражданство", side: "front" },
+  { key: "documentNumber", label: "Номер документа", side: "front" },
+  { key: "nationalIdNumber", label: "Единый национальный ID", side: "front" },
+  { key: "issueDate", label: "Дата выдачи", side: "front" },
+  { key: "expiryDate", label: "Срок действия", side: "front" },
+  { key: "address", label: "Адрес", side: "back", wide: true },
+  { key: "maritalStatus", label: "Семейное положение", side: "back" },
+  { key: "bloodGroup", label: "Группа крови", side: "back" },
+  { key: "taxId", label: "ИНН", side: "back" },
+  { key: "authority", label: "Орган выдачи", side: "back", wide: true },
 ]
 
 const SOURCE_LABELS: Record<RecognizedField["source"], string> = {
@@ -598,10 +610,15 @@ export const Home = () => {
               <span>Пустое поле = значение не распознано надёжно</span>
             </div>
             <div className={styles.fieldsBlock}>
-              {ID_CARD_FIELD_LABELS.map(({ key, label }) => {
+              {ID_CARD_FIELD_LABELS.filter(
+                ({ side }) => side === "front" || sideResults.back,
+              ).map(({ key, label, wide }) => {
                 const metadata = fieldMetadata[key]
                 return (
-                  <label key={key} className={styles.fieldRow}>
+                  <label
+                    key={key}
+                    className={wide ? styles.fieldRowWide : styles.fieldRow}
+                  >
                     <span className={styles.fieldLabelRow}>
                       <span className={styles.fieldLabel}>{label}</span>
                       {metadata && (
