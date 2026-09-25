@@ -8,7 +8,7 @@ import type { AnchoredNames, NameField, OcrLine } from "./id-card-names"
 import type { IdCardFieldKey, RecognizedField } from "./id-card-recognition"
 import type { ProcessingImage } from "./scanner.types"
 
-type Worker = Awaited<ReturnType<typeof createWorker>>
+export type Worker = Awaited<ReturnType<typeof createWorker>>
 type FieldMap = Partial<Record<IdCardFieldKey, RecognizedField>>
 
 export type ZoneReadings = { fields: FieldMap; names: AnchoredNames }
@@ -159,7 +159,7 @@ export const parseZoneRead = (
   }
 }
 
-const cropRect = (
+export const cropRect = (
   bitmap: ImageBitmap,
   rect: Bbox,
   padding: number,
@@ -239,9 +239,13 @@ const confidenceFor = (kind: ZoneKind, ocrConfidence: number): number =>
 // digit still passes every shape check. Numbers and dates are therefore read
 // from several crops; a value seen twice wins outright, otherwise the most
 // confident read does.
-type Votes = Map<string, { count: number; confidence: number }>
+export type Votes = Map<string, { count: number; confidence: number }>
 
-const addVote = (votes: Votes, value: string, confidence: number): void => {
+export const addVote = (
+  votes: Votes,
+  value: string,
+  confidence: number,
+): void => {
   const vote = votes.get(value) ?? { count: 0, confidence: 0 }
   votes.set(value, {
     count: vote.count + 1,
@@ -249,12 +253,12 @@ const addVote = (votes: Votes, value: string, confidence: number): void => {
   })
 }
 
-const agreedVotes = (votes: Votes): boolean =>
+export const agreedVotes = (votes: Votes): boolean =>
   [...votes.values()].some((vote) => vote.count >= 2)
 
-const winner = (
+export const winner = (
   votes: Votes,
-): { value: string; confidence: number } | undefined => {
+): { value: string; count: number; confidence: number } | undefined => {
   let best: { value: string; count: number; confidence: number } | undefined
   for (const [value, vote] of votes)
     if (
@@ -322,13 +326,17 @@ const readAnchoredZones = async (
           }
           break search
         }
-        if (data.confidence < confidenceFloor(kind)) continue
         addVote(votes, value, data.confidence)
         if (agreedVotes(votes)) break search
       }
     }
+    // Two crops agreeing on a value of the right shape is accepted whatever
+    // the engine reports; a single read must clear the confidence floor.
     const chosen = winner(votes)
-    if (chosen)
+    if (
+      chosen &&
+      (chosen.count >= 2 || chosen.confidence >= confidenceFloor(kind))
+    )
       readings.fields[field as IdCardFieldKey] = {
         value: chosen.value,
         confidence: confidenceFor(kind, chosen.confidence),
@@ -388,12 +396,15 @@ const readFixedZones = async (
     for (const padding of [0.1, 0.35, 0.7]) {
       const { data } = await worker.recognize(cropRect(bitmap, rect, padding))
       const value = parseZoneRead(zone.key, "value", data.text)
-      if (!value || data.confidence < confidenceFloor(kind)) continue
+      if (!value) continue
       addVote(votes, value, data.confidence)
       if (agreedVotes(votes)) break
     }
     const chosen = winner(votes)
-    if (chosen)
+    if (
+      chosen &&
+      (chosen.count >= 2 || chosen.confidence >= confidenceFloor(kind))
+    )
       fields[zone.key as IdCardFieldKey] = {
         value: chosen.value,
         confidence: confidenceFor(kind, chosen.confidence),

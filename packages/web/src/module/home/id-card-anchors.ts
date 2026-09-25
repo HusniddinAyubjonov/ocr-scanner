@@ -30,12 +30,23 @@ export type AnchorField =
   | "expiryDate"
   | "nationalIdNumber"
   | "documentNumber"
+  | "address"
+  | "authority"
+  | "maritalStatus"
+  | "bloodGroup"
+  | "taxId"
 
 // A name is printed twice (Cyrillic, then Latin below it), so it has two
 // zones; every other value has one.
 export type ZonePart = "cyrillic" | "latin" | "value"
 
-export type Zone = { field: AnchorField; part: ZonePart; rect: Bbox }
+// `line` numbers the lines of a value that wraps (the address).
+export type Zone = {
+  field: AnchorField
+  part: ZonePart
+  rect: Bbox
+  line?: number
+}
 
 export type Segment = { text: string; confidence: number; bbox: Bbox }
 

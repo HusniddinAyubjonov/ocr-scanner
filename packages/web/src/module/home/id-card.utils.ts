@@ -8,6 +8,11 @@ export type IdCardFields = {
   citizenship: string
   documentNumber: string
   nationalIdNumber: string
+  address: string
+  authority: string
+  maritalStatus: string
+  bloodGroup: string
+  taxId: string
   issueDate: string
   expiryDate: string
 }
@@ -22,6 +27,11 @@ export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
   citizenship: "",
   documentNumber: "",
   nationalIdNumber: "",
+  address: "",
+  authority: "",
+  maritalStatus: "",
+  bloodGroup: "",
+  taxId: "",
   issueDate: "",
   expiryDate: "",
 }

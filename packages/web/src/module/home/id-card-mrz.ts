@@ -1,4 +1,5 @@
 import { parse as parseMrz } from "mrz"
+import type { Bbox, Page } from "tesseract.js"
 import type { IdCardFieldKey, RecognizedField } from "./id-card-recognition"
 
 type FieldMap = Partial<Record<IdCardFieldKey, RecognizedField>>
@@ -16,6 +17,8 @@ export type MrzResult = {
 }
 
 const MRZ_LINE_LENGTH = 30
+const OPTIONAL_START = 15
+const NATIONAL_ID_LENGTH = 13
 const EXPECTED_STATE = "TJK"
 const WEIGHTS = [7, 3, 1]
 
@@ -121,8 +124,15 @@ const repairLine2 = (line: string): string => {
 const FILLER_LOOKALIKES = "KLCESIX"
 const FILLER_RUN = new RegExp(`[${FILLER_LOOKALIKES}<]{4,}$`)
 
+// A separator is often read with a letter wedged between its chevrons
+// ("RUZYEVA<K<MUNISA" for "RUZYEVA<<MUNISA"). A letter with a chevron on both
+// sides is never part of a name.
+const WEDGED_FILLER = new RegExp(`<[${FILLER_LOOKALIKES}]+(?=<)`, "g")
+
 const repairLine3 = (line: string): string => {
-  const trimmed = line.replace(FILLER_RUN, (run) => "<".repeat(run.length))
+  const trimmed = line
+    .replace(WEDGED_FILLER, (run) => "<".repeat(run.length))
+    .replace(FILLER_RUN, (run) => "<".repeat(run.length))
   return trimmed.slice(0, MRZ_LINE_LENGTH).padEnd(MRZ_LINE_LENGTH, "<")
 }
 
@@ -313,6 +323,19 @@ export const parseMrzText = (text: string): MrzResult | null => {
   if (mrz.sex === "female") set("sex", "F", unchecked)
   if (/^[A-Z]{3}$/.test(mrz.nationality ?? ""))
     set("citizenship", mrz.nationality, unchecked)
+  // Tajik cards carry the national ID number in the optional data of line 1.
+  // It shares the composite check digit with the rest of the line, and the
+  // document number's own check digit vouches for where the line is aligned.
+  if (documentOk || compositeOk) {
+    const optional = mapRange(
+      best.lines[0].slice(OPTIONAL_START, OPTIONAL_START + NATIONAL_ID_LENGTH),
+      0,
+      NATIONAL_ID_LENGTH - 1,
+      DIGIT_LOOKALIKES,
+    )
+    if (new RegExp(`^\\d{${NATIONAL_ID_LENGTH}}$`).test(optional))
+      set("nationalIdNumber", optional, unchecked)
+  }
 
   const names: MrzNames = {}
   const surname = cleanName(mrz.lastName ?? "")
@@ -320,4 +343,21 @@ export const parseMrzText = (text: string): MrzResult | null => {
   if (NAME_PATTERN.test(surname)) names.surname = surname
   if (NAME_PATTERN.test(givenNames)) names.givenNames = givenNames
   return { fields, names, score, lines: best.lines }
+}
+
+// Where the MRZ lines are on the image, top to bottom, for registering the
+// rest of the card against them. Only lines that look like MRZ lines count;
+// with more than three, the bottom three are the MRZ.
+export const mrzLineBoxes = (page: Page): Bbox[] => {
+  const lines = (page.blocks ?? [])
+    .flatMap((block) =>
+      block.paragraphs.flatMap((paragraph) => paragraph.lines),
+    )
+    .filter((line) => {
+      const cleaned = line.text.toUpperCase().replace(/[^A-Z0-9<]/g, "")
+      return cleaned.length >= 24 && cleaned.length <= 36
+    })
+    .map((line) => line.bbox)
+    .sort((first, second) => first.y0 - second.y0)
+  return lines.slice(-3)
 }
