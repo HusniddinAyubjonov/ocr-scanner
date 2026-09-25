@@ -26,8 +26,8 @@ import { INITIAL_SCANNER_STATE } from "./scanner.types"
 import type { ProcessingImage, ScannerState } from "./scanner.types"
 import styles from "./home.module.css"
 
-// Fields printed on the back of the card only show once a back has been
-// scanned; the front ones are also filled from the MRZ on the back.
+// The form has a group per side of the card. The MRZ on the back also fills
+// some of the front fields.
 const ID_CARD_FIELD_LABELS: {
   key: keyof IdCardFields
   label: string
@@ -609,9 +609,14 @@ export const Home = () => {
               <h2>Данные ID-карты</h2>
               <span>Пустое поле = значение не распознано надёжно</span>
             </div>
-            <div className={styles.fieldsBlock}>
+            {(["front", "back"] as CardSide[]).map((groupSide) => (
+              <div key={groupSide}>
+                <h3 className={styles.fieldGroupTitle}>
+                  {groupSide === "front" ? "Лицевая сторона" : "Обратная сторона"}
+                </h3>
+                <div className={styles.fieldsBlock}>
               {ID_CARD_FIELD_LABELS.filter(
-                ({ side }) => side === "front" || sideResults.back,
+                ({ side }) => side === groupSide,
               ).map(({ key, label, wide }) => {
                 const metadata = fieldMetadata[key]
                 return (
@@ -652,7 +657,9 @@ export const Home = () => {
                   </label>
                 )
               })}
-            </div>
+                </div>
+              </div>
+            ))}
           </section>
         )}
         {(recognizedText || scannerState.status.stage === "ready") && (
