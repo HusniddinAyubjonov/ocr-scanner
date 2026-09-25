@@ -141,16 +141,6 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
     validate: validateDigits,
   },
   {
-    key: "authority",
-    labels: [/\bauthority\b/i, /ма[қк]оми(?: шиносномади[ҳх]анда)?/i],
-    validate: validateText,
-  },
-  {
-    key: "address",
-    labels: [/\baddress\b/i, /нишон[иӣ]/i],
-    validate: validateText,
-  },
-  {
     key: "issueDate",
     labels: [/date of issue/i, /санаи додан/i],
     validate: validateDate,
@@ -159,16 +149,6 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
     key: "expiryDate",
     labels: [/date of expiry/i, /му[ҳх]лати амал/i],
     validate: validateDate,
-  },
-  {
-    key: "maritalStatus",
-    labels: [/marital status/i, /вазъи оилав/i],
-    validate: validateText,
-  },
-  {
-    key: "bloodGroup",
-    labels: [/blood group/i, /гур[ӯу][ҳх]и хун/i],
-    validate: validateText,
   },
 ]
 

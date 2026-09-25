@@ -7,7 +7,8 @@ export type MrzNames = { surname?: string; givenNames?: string }
 
 export type MrzResult = {
   fields: FieldMap
-  // Latin names from line 3, also present in `fields` as surname/givenNames.
+  // Latin names from line 3. They are evidence for the Tajik (Cyrillic)
+  // names, never shown as field values themselves.
   names: MrzNames
   // Check-digit based quality of the read, used to choose between OCR passes.
   score: number
@@ -316,13 +317,7 @@ export const parseMrzText = (text: string): MrzResult | null => {
   const names: MrzNames = {}
   const surname = cleanName(mrz.lastName ?? "")
   const givenNames = cleanName(mrz.firstName ?? "")
-  if (NAME_PATTERN.test(surname)) {
-    names.surname = surname
-    set("surname", surname, unchecked)
-  }
-  if (NAME_PATTERN.test(givenNames)) {
-    names.givenNames = givenNames
-    set("givenNames", givenNames, unchecked)
-  }
+  if (NAME_PATTERN.test(surname)) names.surname = surname
+  if (NAME_PATTERN.test(givenNames)) names.givenNames = givenNames
   return { fields, names, score, lines: best.lines }
 }

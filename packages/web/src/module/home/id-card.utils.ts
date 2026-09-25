@@ -6,15 +6,11 @@ export type IdCardFields = {
   birthDate: string
   birthPlace: string
   citizenship: string
-  address: string
   personalIdNumber: string
-  authority: string
   documentNumber: string
   nationalIdNumber: string
   issueDate: string
   expiryDate: string
-  maritalStatus: string
-  bloodGroup: string
 }
 
 export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
@@ -25,15 +21,11 @@ export const EMPTY_ID_CARD_FIELDS: IdCardFields = {
   birthDate: "",
   birthPlace: "",
   citizenship: "",
-  address: "",
   personalIdNumber: "",
-  authority: "",
   documentNumber: "",
   nationalIdNumber: "",
   issueDate: "",
   expiryDate: "",
-  maritalStatus: "",
-  bloodGroup: "",
 }
 
 const ID_CARD_MARKERS =
@@ -141,21 +133,8 @@ const MAX_INLINE_VALUE_LENGTH = 20
 const looksLikeInlineValue = (text: string): boolean =>
   looksLikeValue(text) && text.length <= MAX_INLINE_VALUE_LENGTH
 
-// Generic "short text with enough letters" is too permissive for blood
-// group specifically — a fragment of an unrelated neighbouring label
-// ("Tax Payer ID number") passes that check just as easily as a real value.
-// A genuine blood type is always A/B/O/AB, optionally with a group number
-// and Rh factor (e.g. "A(I)Rh-", "O(I)Rh+", "AB(IV)Rh").
-const looksLikeBloodGroup = (text: string): boolean =>
-  /^(AB|[ABO])\s*\(?(I{1,3}|IV)?\)?\s*Rh\.?\s*[+-]?$/i.test(text.trim())
-
 const FIELD_LABELS: Record<
-  | "fatherName"
-  | "birthPlace"
-  | "authority"
-  | "documentNumber"
-  | "maritalStatus"
-  | "bloodGroup",
+  "fatherName" | "birthPlace" | "documentNumber",
   RegExp[]
 > = {
   // OCR is inconsistent about the "қ"/"ҳ"/"ӣ" hooks — sometimes keeps them,
@@ -163,18 +142,7 @@ const FIELD_LABELS: Record<
   // accepted throughout.
   fatherName: [/номи\s*па[а-яёa-z]{2,4}/i, /father.?s?\s*name/i],
   birthPlace: [/[чцҷ]ои\s*таваллуд/i, /place\s*of\s*birth/i],
-  // "Мақоми шиносномадиханда" is the full Tajik phrase ("issuing
-  // authority") — stripping only "Мақоми" left "шиносномадиханда" behind
-  // looking exactly like a plausible short value.
-  authority: [/ма[кқ]оми(\s*шиносномадиханда)?/i, /\bauthority\b/i],
   documentNumber: [/ра[кқ]ами?\s*шиноснома/i, /document\s*(id\s*)?(no|№)\.?/i],
-  maritalStatus: [/вазъи\s*оилав[^\s/]*/i, /marital\s*status/i],
-  // The word(s) after "гурӯҳи" ("group") vary wildly by OCR pass (хун, кум,
-  // хун ва резуси, ...) — this is descriptive label text ("blood group and
-  // Rh factor"), not data, so it's consumed too when present; otherwise just
-  // recognizing "гурӯҳи" itself is enough to treat the line as this label
-  // and stop it from bleeding into whatever field comes next.
-  bloodGroup: [/гур[ӯу][хҳ]и(\s*хун(\s*ва\s*резуси)?)?/i, /blood\s*group/i],
 }
 
 // OCR sometimes reads the leading "I" of "ID number" as the digit "1".
@@ -383,7 +351,6 @@ const extractLabeledField = (
   labelPatterns: RegExp[],
   options?: {
     skipIf?: (line: string) => boolean
-    inlineOnly?: boolean
     isValidValue?: (value: string) => boolean
   },
 ): string => {
@@ -407,14 +374,6 @@ const extractLabeledField = (
 
     if (remainder && isValidValue(remainder)) {
       return remainder
-    }
-
-    // Blood group in particular has never once had a genuine value on the
-    // following line across every real scan seen so far — whatever's there
-    // always turns out to belong to some other field (authority, an ID
-    // number...). Fields marked inlineOnly stop here instead of guessing.
-    if (options?.inlineOnly) {
-      continue
     }
 
     const next = lines[i + 1]?.trim()
@@ -465,36 +424,6 @@ const findCapsWordAfterLabel = (
   return ""
 }
 
-const extractAddress = (lines: string[]): string => {
-  const startIndex = lines.findIndex((line) => ADDRESS_LABEL.test(line))
-
-  if (startIndex === -1) {
-    return ""
-  }
-
-  const collected: string[] = []
-
-  for (let i = startIndex + 1; i < lines.length; i += 1) {
-    if (isKnownLabelLine(lines[i])) {
-      break
-    }
-
-    // OCR sometimes merges an unrelated date (e.g. the birth date) onto the
-    // same line as an address fragment — strip it so it doesn't pollute the
-    // address text; extractIdCardFields picks it up separately as birthDate.
-    const cleaned = lines[i]
-      .replace(DATE_PATTERN, "")
-      .replace(/\s{2,}/g, " ")
-      .trim()
-
-    if (cleaned) {
-      collected.push(cleaned)
-    }
-  }
-
-  return collected.join(", ")
-}
-
 const extractPersonalIdNumber = (lines: string[]): string => {
   const labelIndex = lines.findIndex((line) => PERSONAL_ID_LABEL.test(line))
 
@@ -530,17 +459,9 @@ export const extractIdCardFields = (text: string): IdCardFields => {
     birthPlace: extractLabeledField(lines, FIELD_LABELS.birthPlace, {
       skipIf: isBirthRowHeader,
     }),
-    authority: extractLabeledField(lines, FIELD_LABELS.authority),
     documentNumber: extractLabeledField(lines, FIELD_LABELS.documentNumber),
-    maritalStatus: extractLabeledField(lines, FIELD_LABELS.maritalStatus),
-    bloodGroup: extractLabeledField(lines, FIELD_LABELS.bloodGroup, {
-      inlineOnly: true,
-      isValidValue: looksLikeBloodGroup,
-    }),
     personalIdNumber: extractPersonalIdNumber(lines),
   }
-
-  fromLabels.address = extractAddress(lines)
 
   fromLabels.surname = findCapsWordAfterLabel(lines, SURNAME_LABEL)
   fromLabels.givenNames = findCapsWordAfterLabel(lines, GIVEN_NAME_LABEL)
@@ -734,21 +655,6 @@ export const extractIdCardFields = (text: string): IdCardFields => {
 
   for (const key of ["surname", "givenNames", "fatherName"] as const) {
     if (fields[key] && !isPlausibleName(fields[key])) fields[key] = ""
-  }
-
-  // A garbled label run can fuse straight into the value with no separator
-  // ("MYYAPPAYSINGLE") — if a known status word is recognizable inside it,
-  // that word alone is a cleaner result than the whole fused string. When
-  // the label itself is missing entirely, the status word can still show up
-  // unlabeled on some other line, so this checks the whole text as a last
-  // resort.
-  const statusPattern = /married|single|divorced|widowed/i
-  const maritalStatusMatch =
-    fields.maritalStatus.match(statusPattern) ??
-    lines.map((line) => line.match(statusPattern)).find(Boolean)
-
-  if (maritalStatusMatch) {
-    fields.maritalStatus = maritalStatusMatch[0].toUpperCase()
   }
 
   return fields

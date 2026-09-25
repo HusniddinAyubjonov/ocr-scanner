@@ -18,9 +18,16 @@ export type OcrLine = { text: string; confidence: number; bbox: Bbox }
 export type NameEvidence = {
   cyrillic: OcrLine[]
   latin: OcrLine[]
+  // Read directly under each name's own label, so which field it is doesn't
+  // depend on reading order.
+  anchored: AnchoredNames
   labeled: NameFieldMap
   mrz: MrzNames
 }
+
+export type AnchoredNames = Partial<
+  Record<NameField, { cyrillic: OcrLine[]; latin: OcrLine[] }>
+>
 
 const CYRILLIC_LETTERS = "АБВГҒДЕЁЖЗИӢЙКҚЛМНОПРСТУӮФХҲЦЧҶШЩЪЫЬЭЮЯ"
 const CYRILLIC_NAME = new RegExp(
@@ -141,6 +148,7 @@ export const toOcrLines = (page: Page): OcrLine[] =>
 export const buildNameEvidence = (input: {
   tajikLines: OcrLine[]
   englishLines: OcrLine[]
+  anchored?: AnchoredNames
   labeled: NameFieldMap
   mrz: MrzNames
 }): NameEvidence => {
@@ -174,9 +182,153 @@ export const buildNameEvidence = (input: {
             other.confidence > line.confidence + SHADOW_MARGIN,
         ),
     ),
+    anchored: input.anchored ?? {},
     labeled: input.labeled,
     mrz: input.mrz,
   }
+}
+
+// Latin transliteration tokens, longest first, and the Cyrillic letters each
+// can stand for. Several letters share a token where the transliteration
+// doesn't tell them apart (И/Ӣ, У/Ӯ, Е/Э, Й/Ы).
+const LATIN_TOKENS: [string, string[]][] = [
+  ["SHCH", ["Щ"]],
+  ["GH", ["Ғ"]],
+  ["ZH", ["Ж"]],
+  ["KH", ["Х"]],
+  ["TS", ["Ц"]],
+  ["CH", ["Ч"]],
+  ["SH", ["Ш"]],
+  ["YO", ["Ё"]],
+  ["YU", ["Ю"]],
+  ["YA", ["Я"]],
+  ["A", ["А"]],
+  ["B", ["Б"]],
+  ["V", ["В"]],
+  ["G", ["Г"]],
+  ["D", ["Д"]],
+  ["E", ["Е", "Э"]],
+  ["Z", ["З"]],
+  ["I", ["И", "Ӣ"]],
+  ["Y", ["Й", "Ы"]],
+  ["K", ["К"]],
+  ["Q", ["Қ"]],
+  ["L", ["Л"]],
+  ["M", ["М"]],
+  ["N", ["Н"]],
+  ["O", ["О"]],
+  ["P", ["П"]],
+  ["R", ["Р"]],
+  ["S", ["С"]],
+  ["T", ["Т"]],
+  ["U", ["У", "Ӯ"]],
+  ["F", ["Ф"]],
+  ["H", ["Ҳ"]],
+  ["J", ["Ҷ"]],
+]
+
+// Letters the Tajik model swaps for one another in this typeface. A letter is
+// only corrected to one it is known to be confused with, so a wrong Latin
+// letter can't overwrite a Cyrillic one that was read right.
+const CONFUSION_GROUPS = [
+  "НПИЙ",
+  "АЛД",
+  "БВЬ",
+  "ОСЭФ",
+  "ЕСЁ",
+  "КҚХҲ",
+  "ГҒТР",
+  "ЧҶУӮ",
+  "ШЩЦ",
+  "ИӢ",
+  "ЗЭВ",
+  "ЖК",
+  "МН",
+  "ЛП",
+  "РЯҒ",
+]
+const CONFUSABLE = new Map<string, Set<string>>()
+for (const group of CONFUSION_GROUPS)
+  for (const letter of group) {
+    const others = CONFUSABLE.get(letter) ?? new Set<string>()
+    for (const other of group) if (other !== letter) others.add(other)
+    CONFUSABLE.set(letter, others)
+  }
+
+const CONFUSED_COST = 1
+const UNRELATED_COST = 3
+const EXTRA_LETTER_COST = 2
+const MAX_REPAIR_COST = 3
+
+// Aligns the Cyrillic reading with the Latin one letter by letter and fixes
+// the letters that disagree, when the Cyrillic letter is one the model is
+// known to confuse with the one the Latin says. Returns null when the two
+// are too far apart to be the same name.
+const alignRepair = (cyrillic: string, latin: string): string | null => {
+  if (/\s/.test(cyrillic) || latin.length === 0) return null
+  const letters = [...cyrillic]
+  const cost: number[][] = Array.from({ length: letters.length + 1 }, () =>
+    Array(latin.length + 1).fill(Infinity),
+  )
+  const step: { from: [number, number]; letter: string }[][] = Array.from(
+    { length: letters.length + 1 },
+    () => Array(latin.length + 1),
+  )
+  cost[0][0] = 0
+  const relax = (
+    i: number,
+    j: number,
+    value: number,
+    from: [number, number],
+    letter: string,
+  ) => {
+    if (value < cost[i][j]) {
+      cost[i][j] = value
+      step[i][j] = { from, letter }
+    }
+  }
+  for (let i = 0; i <= letters.length; i += 1)
+    for (let j = 0; j <= latin.length; j += 1) {
+      const here = cost[i][j]
+      if (here === Infinity) continue
+      if (i < letters.length) {
+        const letter = letters[i]
+        const token = TRANSLIT[letter] ?? ""
+        if (token === "") relax(i + 1, j, here + 0.5, [i, j], "")
+        else if (latin.startsWith(token, j))
+          relax(i + 1, j + token.length, here, [i, j], letter)
+        relax(i + 1, j, here + EXTRA_LETTER_COST, [i, j], "")
+      }
+      for (const [token, options] of LATIN_TOKENS) {
+        if (!latin.startsWith(token, j)) continue
+        if (i < letters.length) {
+          const letter = letters[i]
+          const same = options.includes(letter)
+          const confused = options.find((option) =>
+            CONFUSABLE.get(letter)?.has(option),
+          )
+          if (!same)
+            relax(
+              i + 1,
+              j + token.length,
+              here + (confused ? CONFUSED_COST : UNRELATED_COST),
+              [i, j],
+              confused ?? options[0],
+            )
+        }
+        relax(i, j + token.length, here + EXTRA_LETTER_COST, [i, j], options[0])
+      }
+    }
+  const total = cost[letters.length][latin.length]
+  if (total === Infinity || total > MAX_REPAIR_COST) return null
+  let result = ""
+  let at: [number, number] = [letters.length, latin.length]
+  while (at[0] !== 0 || at[1] !== 0) {
+    const previous = step[at[0]][at[1]]
+    result = previous.letter + result
+    at = previous.from
+  }
+  return result
 }
 
 type Repair = { value: string; ratio: number }
@@ -221,7 +373,17 @@ const repairByLatin = (cyrillic: string, anchors: string[]): Repair => {
     )
       best = { value, cost: variantCost, flips }
   }
-  return { value: best.value, ratio: ratioOf(best.value) }
+  const hooked = { value: best.value, ratio: ratioOf(best.value) }
+  if (hooked.ratio === 0) return hooked
+  // Still off: letters the hook search can't fix. Correct them against each
+  // Latin reading and keep whichever result agrees best with all of them.
+  let bestAligned = hooked
+  for (const anchor of anchors) {
+    const aligned = alignRepair(hooked.value, anchor)
+    if (aligned && ratioOf(aligned) < bestAligned.ratio)
+      bestAligned = { value: aligned, ratio: ratioOf(aligned) }
+  }
+  return bestAligned
 }
 
 type Pair = { cyrillic: OcrLine; latin?: OcrLine; verified: boolean }
@@ -274,6 +436,40 @@ const labeledField = (
     .filter((value): value is RecognizedField => Boolean(value))
     .sort((first, second) => second.confidence - first.confidence)[0]
 
+// The Cyrillic and Latin reads of one name label agree when the Cyrillic one
+// transliterates to the Latin one; of several reads, the closest pair wins.
+const anchoredPair = (entry: {
+  cyrillic: OcrLine[]
+  latin: OcrLine[]
+}): Pair | undefined => {
+  let best: { pair: Pair; ratio: number } | undefined
+  for (const cyrillic of entry.cyrillic) {
+    const candidates = entry.latin.length > 0 ? entry.latin : [undefined]
+    for (const latin of candidates) {
+      const ratio = latin
+        ? distanceRatio(transliterate(cyrillic.text), compactLatin(latin.text))
+        : 1
+      const pair: Pair = {
+        cyrillic,
+        latin,
+        verified: latin ? agrees(cyrillic.text, latin.text) : false,
+      }
+      if (
+        !best ||
+        ratio < best.ratio ||
+        (ratio === best.ratio &&
+          cyrillic.confidence > best.pair.cyrillic.confidence)
+      )
+        best = { pair, ratio }
+    }
+  }
+  return best?.pair
+}
+
+// A read that nothing confirms is only shown when the model itself was
+// reasonably sure of it; a zone that landed on the wrong place reads as
+// low-confidence noise.
+const MIN_UNCONFIRMED_CONFIDENCE = 60
 const MRZ_MATCH_RATIO = 0.3
 const UNVERIFIED_MRZ_MATCH_RATIO = 0.2
 const LABEL_ONLY_CEILING = 55
@@ -286,13 +482,30 @@ export const resolveNames = (sides: NameEvidence[]): NameFieldMap => {
     anchors.givenNames ??= side.mrz.givenNames
   }
   const pairsBySide = sides.map(buildPairs)
-  const allPairs = pairsBySide.flat()
+  const anchoredPairs = new Map<NameField, Pair>()
+  for (const side of sides)
+    for (const field of NAME_FIELDS) {
+      const entry = side.anchored[field]
+      const pair = entry && anchoredPair(entry)
+      if (pair && !anchoredPairs.has(field)) anchoredPairs.set(field, pair)
+    }
+  const allPairs = [...pairsBySide.flat(), ...anchoredPairs.values()]
   const assigned = new Map<NameField, Pair>()
   const used = new Set<Pair>()
   const take = (field: NameField, pair: Pair | undefined) => {
     if (!pair || used.has(pair)) return
     assigned.set(field, pair)
     used.add(pair)
+    // The same physical line found by another pass is not a second name.
+    for (const other of allPairs)
+      if (sameLine(other.cyrillic, pair.cyrillic)) used.add(other)
+  }
+
+  // 0. Read right under its own label and confirmed by the Latin line under
+  //    it: which field it is, and that it is right, are both settled.
+  for (const field of NAME_FIELDS) {
+    const pair = anchoredPairs.get(field)
+    if (pair?.verified) take(field, pair)
   }
 
   // 1. The MRZ names are the most trustworthy Latin text on the card, so a
@@ -300,7 +513,7 @@ export const resolveNames = (sides: NameEvidence[]): NameFieldMap => {
   //    it is, whatever the layout looks like.
   for (const field of ["surname", "givenNames"] as const) {
     const anchor = anchors[field] && compactLatin(anchors[field])
-    if (!anchor) continue
+    if (!anchor || assigned.has(field)) continue
     let best: { pair: Pair; ratio: number } | undefined
     for (const pair of allPairs) {
       if (used.has(pair)) continue
@@ -313,6 +526,18 @@ export const resolveNames = (sides: NameEvidence[]): NameFieldMap => {
         best = { pair, ratio }
     }
     take(field, best?.pair)
+  }
+
+  // 1b. Read under its own label but not confirmed by anything: still the
+  //     right field, just not proven right.
+  for (const field of NAME_FIELDS) {
+    const pair = anchoredPairs.get(field)
+    if (
+      !assigned.has(field) &&
+      pair &&
+      pair.cyrillic.confidence >= MIN_UNCONFIRMED_CONFIDENCE
+    )
+      take(field, pair)
   }
 
   // 2. A value the label parsers already found under its own label.
@@ -373,6 +598,19 @@ export const resolveNames = (sides: NameEvidence[]): NameFieldMap => {
         continue
       }
       const repair = repairByLatin(pair.cyrillic.text, latinAnchors)
+      // The Latin text doesn't match the Cyrillic reading: nothing confirms it.
+      if (repair.ratio > MRZ_MATCH_RATIO) {
+        result[field] = {
+          value: repair.value,
+          confidence: clamp(
+            lineConfidence,
+            LABEL_ONLY_FLOOR,
+            LABEL_ONLY_CEILING,
+          ),
+          source: "layout",
+        }
+        continue
+      }
       result[field] = {
         value: repair.value,
         confidence:
